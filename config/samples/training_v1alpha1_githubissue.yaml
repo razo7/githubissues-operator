@@ -1,0 +1,7 @@
+apiVersion: training.githubissues/v1alpha1
+kind: GithubIssue
+metadata:
+  name: githubissue-sample
+spec:
+  # Add fields here
+  foo: bar
