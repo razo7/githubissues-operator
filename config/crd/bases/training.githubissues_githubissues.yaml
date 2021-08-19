@@ -1,0 +1,76 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.6.1
+  creationTimestamp: null
+  name: githubissues.training.githubissues
+spec:
+  group: training.githubissues
+  names:
+    kind: GithubIssue
+    listKind: GithubIssueList
+    plural: githubissues
+    singular: githubissue
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: GithubIssue is the Schema for the githubissues API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: GithubIssueSpec defines the desired state of GithubIssue
+            properties:
+              foo:
+                description: Foo is an example field of GithubIssue. Edit githubissue_types.go
+                  to remove/update
+                type: string
+              repo:
+                description: / The issue's description
+                type: string
+            required:
+            - repo
+            type: object
+          status:
+            description: GithubIssueStatus defines the observed state of GithubIssue
+            properties:
+              lastUpdateTimestamp:
+                description: / timestamp of the last time the state of the github
+                  issue was updated.
+                type: string
+              state:
+                description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
+                  of cluster Important: Run "make" to regenerate code after modifying
+                  this file / Represents the state of the real github issue. Could
+                  be open/closed or other text taken from the github API response.'
+                type: string
+            required:
+            - lastUpdateTimestamp
+            - state
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
