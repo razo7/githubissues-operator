@@ -27,26 +27,24 @@ import (
 type GithubIssueSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	///Represent the github repo's URL - e.g https://github.com/rgolangh/dotfiles
-	repo string `json:"repo"`
-	/// The title of the issue
-	title string `json:"repo"`
-	/// The issue's description
-	description string `json:"repo"`
-	
-
-	// Foo is an example field of GithubIssue. Edit githubissue_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Represent the github repo's URL - e.g https://github.com/rgolangh/dotfiles
+	Repo string `json:"repo"`
+	// The title of the issue
+	Title string `json:"title"`
+	// The issue's description
+	Description string `json:"description"`
+	// The issue's labels which are associated - array of strings or array of objects
+	Labels string `json:"labels,omitempty"`
 }
 
 // GithubIssueStatus defines the observed state of GithubIssue
 type GithubIssueStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	/// Represents the state of the real github issue. Could be open/closed or other text taken from the github API response.
-	state string `json:"state"`
-	/// timestamp of the last time the state of the github issue was updated.
-	lastUpdateTimestamp string `json:"lastUpdateTimestamp"`
+	// Represents the state of the real github issue. Could be open/closed or other text taken from the github API response.
+	State string `json:"state"`
+	// timestamp of the last time the state of the github issue was updated.
+	LastUpdateTimestamp string `json:"lastUpdateTimestamp"`
 }
 
 //+kubebuilder:object:root=true
