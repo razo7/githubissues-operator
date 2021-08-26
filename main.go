@@ -64,7 +64,7 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
-
+	// os.Setenv("KUBECONFIG", "/home/oraz/.kube/kube_config_dsal")
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
@@ -81,6 +81,7 @@ func main() {
 	if err = (&controllers.GithubIssueReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Log:    ctrl.Log.WithName("controllers").WithName("GitHubIssue"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GithubIssue")
 		os.Exit(1)
