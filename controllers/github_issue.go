@@ -55,5 +55,5 @@ func create(ownerRepo, title, body, token string) {
 }
 
 // Source -> https://vorozhko.net/create-github-issue-ticket-with-golang
-// go build main/github_issue.go 
+// go build main/github_issue.go
 // ./main/github_issue --token="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" --repo="razo7/githubissues-operator" --title="my new issue 1" --body="test"
