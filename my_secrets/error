@@ -1,0 +1,16 @@
+enabling experimental podman provider
+Cgroup controller detection is not implemented for Podman. If you see cgroup-related errors, you might need to set systemd property "Delegate=yes", see https://kind.sigs.k8s.io/docs/user/rootless/
+Creating cluster "firstest" ...
+ • Ensuring node image (kindest/node:v1.21.1) 🖼  ...
+ ✓ Ensuring node image (kindest/node:v1.21.1) 🖼
+ • Preparing nodes 📦   ...
+ ✗ Preparing nodes 📦 
+ERROR: failed to create cluster: podman run error: command "podman run --hostname firstest-control-plane --name firstest-control-plane --label io.x-k8s.kind.role=control-plane --privileged --tmpfs /tmp --tmpfs /run --volume 9ad471876551621cb92e77b8513eb9e3275f9f294f6f63e0ee48b306017d1f3b:/var:suid,exec,dev --volume /lib/modules:/lib/modules:ro --detach --tty --net kind --label io.x-k8s.kind.cluster=firstest -e container=podman --publish=127.0.0.1:46255:6443/tcp -e KUBECONFIG=/etc/kubernetes/admin.conf kindest/node@sha256:69860bda5563ac81e3c0057d654b5253219618a22ec3a346306239bba8cfa1a6" failed with error: exit status 127
+
+Command Output: time="2021-08-24T20:45:54+03:00" level=warning msg="Error validating CNI config file /home/oraz/.config/cni/net.d/kind.conflist: [failed to find plugin \"dnsname\" in path [/usr/libexec/cni /usr/lib/cni /usr/local/lib/cni /opt/cni/bin]]"
+time="2021-08-24T20:45:54+03:00" level=warning msg="Error validating CNI config file /home/oraz/.config/cni/net.d/kind.conflist: [failed to find plugin \"dnsname\" in path [/usr/libexec/cni /usr/lib/cni /usr/local/lib/cni /opt/cni/bin]]"
+time="2021-08-24T20:45:54+03:00" level=error msg="error loading cached network config: network \"kind\" not found in CNI cache"
+time="2021-08-24T20:45:54+03:00" level=warning msg="falling back to loading from existing plugins on disk"
+time="2021-08-24T20:45:54+03:00" level=warning msg="Error validating CNI config file /home/oraz/.config/cni/net.d/kind.conflist: [failed to find plugin \"dnsname\" in path [/usr/libexec/cni /usr/lib/cni /usr/local/lib/cni /opt/cni/bin]]"
+time="2021-08-24T20:45:54+03:00" level=error msg="Error tearing down partially created network namespace for container 4f013aeefaf90a4f509eb3ef913beb0a936e9d8a8627348adad01b4c5211fd74: CNI network \"kind\" not found"
+Error: error configuring network namespace for container 4f013aeefaf90a4f509eb3ef913beb0a936e9d8a8627348adad01b4c5211fd74: CNI network "kind" not found
