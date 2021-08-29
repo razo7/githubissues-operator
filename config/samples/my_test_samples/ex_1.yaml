@@ -1,7 +1,7 @@
 apiVersion: training.githubissues/v1alpha1
 kind: GithubIssue
 metadata:
-  name: githubissue-sample2
+  name: githubissue-sample1
 spec:
   # Add fields here
   repo: razo7/githubissues-operator
