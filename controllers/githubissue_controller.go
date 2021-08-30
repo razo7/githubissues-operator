@@ -35,6 +35,7 @@ import (
 	// "fmt"
 	"io/ioutil"
 	"os"
+	"time"
 )
 
 // GithubIssueReconciler reconciles a GithubIssue object
@@ -49,17 +50,15 @@ type GithubRecieve struct {
 	Repo        string `json:"url"` // or `json:"html_url"`
 	Title       string `json:"title"`
 	Description string `json:"body"` // It is called 'body' in the json file
-	State      	string `json:"state,omitempty"`
-	// LastUpdateTimestamp string      `json:"updated_at"`
 	// Name    string    `json:"name"`
 }
 
-// GithubSend - specify data fields for new github issue submission
+// GithubSend - Specify data fields for new github issue submission
 type GithubSend struct {
-	Title 	string 	`json:"title"`
-	Body  	string 	`json:"body"`
+	Title       string `json:"title"`
+	Body        string `json:"body"`
 	// Labels 	string 	`json:"labels` /// TODO: add label functionality
-	
+
 }
 
 //+kubebuilder:rbac:groups=training.githubissues,resources=githubissues,verbs=get;list;watch;create;update;patch;delete
@@ -90,8 +89,8 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	} // Update	githubi with the Kubernetes github object
 
 	// Use REST API, GET, to get all the Github issues which are online
-	ownerRepo := "razo7/githubissues-operator"
-	token := os.Getenv("GIT_TOKEN_GI") // store the github token you use in a secret and use it in the code by reading an env variable
+	ownerRepo := "razo7/githubissues-operator" // TODO: Should be -> ownerRepo := githubi.Spec.Repo
+	token := os.Getenv("GIT_TOKEN_GI")         // store the github token you use in a secret and use it in the code by reading an env variable
 	resp, body, err := r.getIsuues(ownerRepo, token)
 	if resp.StatusCode != http.StatusCreated && err != nil { // TODO: check OR Vs. AND
 		logger.Error(err, "Unable to list issues due to an error", "resp.StatusCode", resp.StatusCode, "http.StatusCreated", http.StatusCreated)
@@ -118,7 +117,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 					logger.Error(err, "Can't update the description in repo's issue")
 				}
 			} else {
-				githubi.Status.State = issue.State // TODO: Is it the right place to update the issue?
+				githubi.Status.State = issue.State                                               // TODO: Is it the right place to update the issue?
 				if err := r.Client.Status().Update(context.Background(), &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
 					logger.Error(err, "Can't update the K8s status state with the real github issue")
 					return ctrl.Result{}, err
@@ -129,7 +128,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	} // for
 
-	logger.Info("There is no matchig github issue ", "isExist", isExist)
+	logger.Info("After seeking for a matching issue from Gitub to the K8s YAML", "isExist", isExist)
 	if !isExist { //no matching issue, then create an issue
 		resp, err = postIsuue(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, token)
 		if err != nil {
@@ -138,9 +137,8 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 
-
-	// return ctrl.Result{RequeueAfter: 1 * time.Second}, nil // tweak the resync period to every 1 minute.
-	return result, nil
+	// closeIssue() // TODO: write a proper call
+	return ctrl.Result{RequeueAfter: 60 * time.Second}, nil // tweak the resync period to every 1 minute.
 }
 func (r *GithubIssueReconciler) getIsuues(ownerRepo string, token string) (*http.Response, []byte, error) {
 	apiURL := "https://api.github.com/repos/" + ownerRepo + "/issues"
@@ -197,6 +195,24 @@ func postIsuue(ownerRepo string, title string, description string, token string)
 		defer resp.Body.Close()
 	}
 	// fmt.Println("fmt - Hello from postIsuue, status = ", resp.StatusCode, " and http.StatusCreated = ", http.StatusCreated, " and err = ", err, "body = ", resp.Body) // fmt option
+	return resp, err
+} // Create a github issue
+
+func closeIsuue(repo string, title string, description string, token string) (*http.Response, error) {
+
+	issueData := GithubSend{Title: title, Body: description, State: "closed", ClosingTime: time.Now().Format("2006-01-02 15:04:05")} // TODO: Maybe it is "close", formating time -> https://stackoverflow.com/questions/33119748/convert-time-time-to-string
+	//make it json
+	jsonData, _ := json.Marshal(issueData)
+	//creating client to set custom headers for Authorization
+	client := &http.Client{}
+	// fmt.Println("issueData ", issueData, ", jsonData", jsonData)
+	req, _ := http.NewRequest("PATCH", repo, bytes.NewReader(jsonData))
+	req.Header.Set("Authorization", "token "+token)
+	resp, err := client.Do(req)
+	if resp.Body != nil {
+		defer resp.Body.Close()
+	}
+	// fmt.Println("fmt - Hello from closeIsuue, status = ", resp.StatusCode, " and http.StatusCreated = ", http.StatusCreated, " and err = ", err, "body = ", resp.Body) // fmt option
 	return resp, err
 } // Create a github issue
 

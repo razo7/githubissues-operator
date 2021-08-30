@@ -1,5 +1,5 @@
 # githubissues-operator
-An exercise of creating an operator 'githubissues-operator', using (Operator SDK for GO) [https://sdk.operatorframework.io/docs/building-operators/golang/tutorial/]
+An exercise of creating an operator 'githubissues-operator', using [Operator SDK for GO](https://sdk.operatorframework.io/docs/building-operators/golang/tutorial/).
 
 ## Introduction
 
