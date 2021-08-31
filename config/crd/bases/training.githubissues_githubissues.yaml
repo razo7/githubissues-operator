@@ -43,6 +43,10 @@ spec:
                 description: The issue's labels which are associated - array of strings
                   or array of objects
                 type: string
+              number:
+                description: The issue's number - used as primary key for finding
+                  if this is a new githubIssue
+                type: integer
               repo:
                 description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
                   Important: Run "make" to regenerate code after modifying this file

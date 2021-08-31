@@ -31,6 +31,8 @@ type GithubIssueSpec struct {
 	Repo string `json:"repo"`
 	// The title of the issue
 	Title string `json:"title"`
+	// The issue's number - used as primary key for finding if this is a new githubIssue
+	Number int `json:"number,omitempty"`
 	// The issue's description
 	Description string `json:"description"`
 	// The issue's labels which are associated - array of strings or array of objects
