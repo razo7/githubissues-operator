@@ -90,7 +90,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	githubi := trainingv1alpha1.GithubIssue{}
 	result := ctrl.Result{}
-	logger.Info("Hi new Issue!", "object", githubi)
+	logger.Info("Hi new Issue!", "object", githubi, "req", req.NamespacedName)
 	if err := r.Get(ctx, req.NamespacedName, &githubi); err != nil {
 		// Can get it because of delete or something else?
 		logger.Info("Can't fetch Kubernetes github object", "object", githubi)
@@ -112,26 +112,27 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// If my K8s GithubIssue doesn't has an ID then create a new GithubIssue and update it's ID
 	// Otherwiese I have already created it earlier and it had an ID and I just update it's description
-	logger.Info("Looking for K8s YAML ID", "githubi.Spec.Number", githubi.Spec.Number)
-	if githubi.Spec.Number == 0 { // Zero = uninitialized field
+	logger.Info("Looking for K8s YAML ID", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
+	if githubi.Status.Number == 0 { // Zero = uninitialized field
 		body, err := postIsuue(ownerRepo, githubi, token)
 		myBody = body
 		if err != nil {
-			logger.Error(err, "Can't create new repo's issueW")
+			logger.Error(err, "Can't create new repo's issue")
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, err
 		}
 		var issue GithubRecieve
-		json.Unmarshal(body, &issue)
-		githubi.Spec.Number = issue.Number // Get the new issue number
-		logger.Info("Get K8s YAML ID", "githubi.Spec.Number", githubi.Spec.Number, "githubi.Spec.Title", githubi.Spec.Title, "githubi.Status.State", githubi.Status.State, "githubi.Spec.Repo", githubi.Spec.Repo)
+		json.Unmarshal(myBody, &issue)
+		githubi.Status.Number = issue.Number // Get the new issue number
+		logger.Info("Get K8s YAML ID", "githubi.Status.Number", githubi.Status.Number, "githubi.Spec.Title", githubi.Spec.Title, "githubi.Status.State", githubi.Status.State, "githubi.Spec.Repo", githubi.Spec.Repo)
 		if err := r.Client.Status().Update(context.Background(), &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
 			logger.Error(err, "Can't update the K8s github issue number from website github issue")
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, err
 		}
 		// update ID and close end reconcile
-		return ctrl.Result{RequeueAfter: 60 * time.Second}, nil // tweak the resync period to every 1 minute.
+		return ctrl.Result{RequeueAfter: 60 * time.Second}, err // tweak the resync period to every 1 minute.
 	} else { // update the description (if needed).
 		body, err := patchIsuue(ownerRepo, githubi, token)
+		logger.Info("Patch", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
 		myBody = body
 		if err != nil {
 			logger.Error(err, "Can't update the description in repo's issue")
@@ -141,6 +142,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	var issue GithubRecieve
 	json.Unmarshal(myBody, &issue)
+	logger.Info("status", "issue.Number", issue.Number, "issue.State", issue.State)
 	githubi.Status.State = issue.State                                               // TODO: Is it the right place to update the issue?
 	if err := r.Client.Status().Update(context.Background(), &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
 		logger.Error(err, "Can't update the K8s status state with the real github issue")
@@ -196,6 +198,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// }
 
 	// closeIssue() // TODO: write a proper call
+	logger.Info("End", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
 	return ctrl.Result{RequeueAfter: 60 * time.Second}, nil // tweak the resync period to every 1 minute.
 }
 
@@ -223,7 +226,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 // } // Fetch all github issues
 
 func patchIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token string) ([]byte, error) {
-	apiURL := "https://api.github.com/repos/" + ownerRepo + "/issues/" + strconv.Itoa(gituhubi.Spec.Number)
+	apiURL := "https://api.github.com/repos/" + ownerRepo + "/issues/" + strconv.Itoa(gituhubi.Status.Number)
 	issueData := GithubSend{Title: gituhubi.Spec.Title, Body: gituhubi.Spec.Description}
 	//make it json
 	jsonData, _ := json.Marshal(issueData)
@@ -263,7 +266,7 @@ func postIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token st
 } // Create a github issue
 
 func closeIssue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token string) ([]byte, error) {
-	apiURL := "https://api.github.com/repos/" + ownerRepo + "/issues/" + strconv.Itoa(gituhubi.Spec.Number)
+	apiURL := "https://api.github.com/repos/" + ownerRepo + "/issues/" + strconv.Itoa(gituhubi.Status.Number)
 	issueData := GithubSend{Title: gituhubi.Spec.Title, Body: gituhubi.Spec.Description, State: "closed", ClosingTime: time.Now().Format("2006-01-02 15:04:05")} // TODO: Maybe it is "close", formating time -> https://stackoverflow.com/questions/33119748/convert-time-time-to-string
 	//make it json
 	jsonData, _ := json.Marshal(issueData)
