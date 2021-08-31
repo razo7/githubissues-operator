@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	// "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/go-logr/logr"
@@ -30,6 +31,8 @@ import (
 
 	"bytes"
 	"encoding/json"
+
+	// metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"net/http"
 
 	// "fmt"
@@ -90,29 +93,33 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	githubi := trainingv1alpha1.GithubIssue{}
 	result := ctrl.Result{}
-	logger.Info("Hi new Issue!", "object", githubi, "req", req.NamespacedName)
+	logger.Info("Hi new Issue!", "object", githubi, "req", req.NamespacedName, "githubi.ObjectMeta", githubi.ObjectMeta, "githubi.Status.Number", githubi.Status.Number)
+	// logger.Info("Hi 2!", "githubi.TypeMeta.String()", githubi.TypeMeta.String(), "githubi.ObjectMeta.GetDeletionTimestamp()", githubi.ObjectMeta.GetDeletionTimestamp())
+	// logger.Info("Hi 3!", "githubi.ObjectMeta.GetCreationTimestamp()", githubi.ObjectMeta.GetCreationTimestamp(), "githubi.ObjectMeta.GetClusterName()", githubi.ObjectMeta.GetClusterName())
+
 	if err := r.Get(ctx, req.NamespacedName, &githubi); err != nil {
 		// Can get it because of delete or something else?
-		logger.Info("Can't fetch Kubernetes github object", "object", githubi)
+		logger.Error(err, "Can't fetch Kubernetes github object", "object", githubi, "githubi.Status.Number", githubi.Status.Number)
 		if apierrors.IsNotFound(err) {
-			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil // tweak the resync period to every 1 minute.
+			return result, nil // tweak the resync period to every 1 minute.
 		}
-		// if githubi.metadata.creationTimestamp == nil {
-		// 	// if the creationTimestamp is null then we should delete this issue from the website
-		// 	body, err := closeIssue(ownerRepo, githubi, token)
-		// 	myBody = body
-		// 	if err != nil {
-		// 		logger.Error(err, "Can't close the repo's issue")
-		// 		return ctrl.Result{RequeueAfter: 10 * time.Second}, err // tweak the resync period to every 1 minute.
-		// 	}
+		// if githubi.ObjectMeta.creationTimestamp == nil {
+		// if the creationTimestamp is null then we should delete this issue from the website
+		body, err := closeIssue(ownerRepo, githubi, token)
+		myBody = body
+		if err != nil {
+			logger.Error(err, "Can't close the repo's issue")
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, err // tweak the resync period to every 1 minute.
+		}
 		// }
-
-		return ctrl.Result{RequeueAfter: 10 * time.Second}, err // tweak the resync period to every 1 minute.
+		logger.Info("I closed the repo's issue")
+		return ctrl.Result{RequeueAfter: 60 * time.Second}, nil // tweak the resync period to every 1 minute.
 	} // Update	githubi with the Kubernetes github object
 
 	// If my K8s GithubIssue doesn't has an ID then create a new GithubIssue and update it's ID
 	// Otherwiese I have already created it earlier and it had an ID and I just update it's description
 	logger.Info("Looking for K8s YAML ID", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
+	var issue GithubRecieve
 	if githubi.Status.Number == 0 { // Zero = uninitialized field
 		body, err := postIsuue(ownerRepo, githubi, token)
 		myBody = body
@@ -120,8 +127,12 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			logger.Error(err, "Can't create new repo's issue")
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, err
 		}
-		var issue GithubRecieve
-		json.Unmarshal(myBody, &issue)
+
+		if err := json.Unmarshal(myBody, &issue); err != nil {
+			logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error")
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, err
+		}
+
 		githubi.Status.Number = issue.Number // Get the new issue number
 		logger.Info("Get K8s YAML ID", "githubi.Status.Number", githubi.Status.Number, "githubi.Spec.Title", githubi.Spec.Title, "githubi.Status.State", githubi.Status.State, "githubi.Spec.Repo", githubi.Spec.Repo)
 		if err := r.Client.Status().Update(context.Background(), &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
@@ -140,8 +151,10 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	}
 
-	var issue GithubRecieve
-	json.Unmarshal(myBody, &issue)
+	if err := json.Unmarshal(myBody, &issue); err != nil {
+		logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error")
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, err
+	}
 	logger.Info("status", "issue.Number", issue.Number, "issue.State", issue.State)
 	githubi.Status.State = issue.State                                               // TODO: Is it the right place to update the issue?
 	if err := r.Client.Status().Update(context.Background(), &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
