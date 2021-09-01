@@ -62,8 +62,8 @@ type GithubRecieve struct {
 
 // GithubSend - specify data fields for new github issue submission
 type GithubSend struct {
-	Title       string `json:"title"`
-	Body        string `json:"body"`
+	Title       string `json:"title,omitempty"`
+	Body        string `json:"body,omitempty"`
 	State       string `json:"state,omitempty"`
 	ClosingTime string `json:"closed_at,omitempty"`
 	// Labels 	string 	`json:"labels` /// TODO: add label functionality
@@ -93,18 +93,20 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	githubi := trainingv1alpha1.GithubIssue{}
 	result := ctrl.Result{}
-	logger.Info("Hi new Issue!", "object", githubi, "req", req.NamespacedName, "githubi.ObjectMeta", githubi.ObjectMeta, "githubi.Status.Number", githubi.Status.Number)
-	// logger.Info("Hi 2!", "githubi.TypeMeta.String()", githubi.TypeMeta.String(), "githubi.ObjectMeta.GetDeletionTimestamp()", githubi.ObjectMeta.GetDeletionTimestamp())
-	// logger.Info("Hi 3!", "githubi.ObjectMeta.GetCreationTimestamp()", githubi.ObjectMeta.GetCreationTimestamp(), "githubi.ObjectMeta.GetClusterName()", githubi.ObjectMeta.GetClusterName())
-
 	if err := r.Get(ctx, req.NamespacedName, &githubi); err != nil {
 		// Can get it because of delete or something else?
-		logger.Error(err, "Can't fetch Kubernetes github object", "object", githubi, "githubi.Status.Number", githubi.Status.Number)
+
+		logger.Info("Hi new Issue!", "object", githubi, "req", req.NamespacedName, "githubi.ObjectMeta", githubi.ObjectMeta)
+		logger.Info("Hi 2!", "githubi.TypeMeta.String()", githubi.TypeMeta.String(), "githubi.ObjectMeta.GetDeletionTimestamp()", githubi.ObjectMeta.GetDeletionTimestamp())
+		logger.Info("Hi 3!", "githubi.ObjectMeta.GetCreationTimestamp()", githubi.ObjectMeta.GetCreationTimestamp(), "githubi.ObjectMeta.GetClusterName()", githubi.ObjectMeta.GetClusterName())
+
 		if apierrors.IsNotFound(err) {
+			logger.Error(err, "Can't fetch Kubernetes github object", "object", githubi, "githubi.Status.Number", githubi.Status.Number)
 			return result, nil // tweak the resync period to every 1 minute.
 		}
 		// if githubi.ObjectMeta.creationTimestamp == nil {
 		// if the creationTimestamp is null then we should delete this issue from the website
+		logger.Info("before close issue")
 		body, err := closeIssue(ownerRepo, githubi, token)
 		myBody = body
 		if err != nil {
@@ -140,10 +142,9 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, err
 		}
 		// update ID and close end reconcile
-		return ctrl.Result{RequeueAfter: 60 * time.Second}, err // tweak the resync period to every 1 minute.
+		return result, err // tweak the resync period to every 1 minute.
 	} else { // update the description (if needed).
 		body, err := patchIsuue(ownerRepo, githubi, token)
-		logger.Info("Patch", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
 		myBody = body
 		if err != nil {
 			logger.Error(err, "Can't update the description in repo's issue")
@@ -155,13 +156,11 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error")
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, err
 	}
-	logger.Info("status", "issue.Number", issue.Number, "issue.State", issue.State)
 	githubi.Status.State = issue.State                                               // TODO: Is it the right place to update the issue?
 	if err := r.Client.Status().Update(context.Background(), &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
-		logger.Error(err, "Can't update the K8s status state with the real github issue")
-		return ctrl.Result{RequeueAfter: 10 * time.Second}, err
+		logger.Error(err, "Can't update the K8s status state with the real github issue, maybe because the github issue has already been closed")
+		return result, err
 	}
-
 	// // Use REST API, GET, to get all the Github issues which are online
 	// ownerRepo := "razo7/githubissues-operator" // TODO: Should be -> ownerRepo := githubi.Spec.Repo
 	// token := os.Getenv("GIT_TOKEN_GI")         // store the github token you use in a secret and use it in the code by reading an env variable
@@ -271,16 +270,13 @@ func postIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token st
 		defer resp.Body.Close()
 	}
 	body, _ := ioutil.ReadAll(resp.Body)
-	// if readErr != nil {
-	// 	r.Log.Error(readErr, "Can't read repo's issues")
-	// }
 	// fmt.Println("fmt - Hello from postIsuue, status = ", resp.StatusCode, " and http.StatusCreated = ", http.StatusCreated, " and err = ", err, " and readErr = ", readErr) // fmt option
 	return body, err
 } // Create a github issue
 
 func closeIssue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token string) ([]byte, error) {
 	apiURL := "https://api.github.com/repos/" + ownerRepo + "/issues/" + strconv.Itoa(gituhubi.Status.Number)
-	issueData := GithubSend{Title: gituhubi.Spec.Title, Body: gituhubi.Spec.Description, State: "closed", ClosingTime: time.Now().Format("2006-01-02 15:04:05")} // TODO: Maybe it is "close", formating time -> https://stackoverflow.com/questions/33119748/convert-time-time-to-string
+	issueData := GithubSend{State: "closed", ClosingTime: time.Now().Format("2006-01-02 15:04:05")} // TODO: Maybe it is "close", formating time -> https://stackoverflow.com/questions/33119748/convert-time-time-to-string
 	//make it json
 	jsonData, _ := json.Marshal(issueData)
 	//creating client to set custom headers for Authorization
