@@ -16,6 +16,10 @@ limitations under the License.
 
 package controllers
 
+//	How to create this repo? Follow the next two lines
+//	operator-sdk init --domain githubissues --repo github.com/razo7/githubissues-operator --owner "Or Raz"
+//	operator-sdk create api --group training --version v1alpha1 --kind GithubIssue --resource --controller
+
 import (
 	"context"
 

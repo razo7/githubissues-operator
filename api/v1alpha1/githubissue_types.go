@@ -27,6 +27,13 @@ import (
 type GithubIssueSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// Implementing defaulting/validating webhooks -> https://book.kubebuilder.io/cronjob-tutorial/webhook-implementation.html
+	// operator-sdk create webhook --group training --version v1alpha1 --kind GithubIssue  --programmatic-validation
+	// How to add CRD validation? -> https://book.kubebuilder.io/reference/markers/crd-validation.html
+
+	// +kubebuilder:validation:Pattern=`^https?:\/\/github.com+/[a-zA-Z0-9\_.-]+/[a-zA-Z0-9\_.-]`
+
 	// Represent the github repo's URL - e.g https://github.com/rgolangh/dotfiles
 	Repo string `json:"repo"`
 	// The title of the issue
