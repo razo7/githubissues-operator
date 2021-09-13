@@ -30,7 +30,7 @@ type GithubIssueSpec struct {
 
 	// Implementing defaulting/validating webhooks -> https://book.kubebuilder.io/cronjob-tutorial/webhook-implementation.html
 	// operator-sdk create webhook --group training --version v1alpha1 --kind GithubIssue  --programmatic-validation
-	// How to add CRD validation? -> https://book.kubebuilder.io/reference/markers/crd-validation.html
+	// How to add CRD validation? -> https://book.kubebuilder.io/reference/markers/crd-validation.html or https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html#validation
 
 	// +kubebuilder:validation:Pattern=`^https?:\/\/github.com+/[a-zA-Z0-9\_.-]+/[a-zA-Z0-9\_.-]`
 

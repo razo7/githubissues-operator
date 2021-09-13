@@ -22,6 +22,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
 	trainingv1alpha1 "github.com/razo7/githubissues-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -93,6 +94,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	logger := r.Log.WithValues("githubssue", req.NamespacedName)
 	ownerRepo := "razo7/githubissues-operator" // TODO: Should be -> ownerRepo := githubi.Spec.Repo
 	token := os.Getenv("GIT_TOKEN_GI")         // store the github token you use in a secret and use it in the code by reading an env variable
+	token = "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"
 	var myBody []byte
 
 	githubi := trainingv1alpha1.GithubIssue{}
@@ -141,7 +143,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 		githubi.Status.Number = issue.Number // Get the new issue number
 		logger.Info("Get K8s YAML ID", "githubi.Status.Number", githubi.Status.Number, "githubi.Spec.Title", githubi.Spec.Title, "githubi.Status.State", githubi.Status.State, "githubi.Spec.Repo", githubi.Spec.Repo)
-		if err := r.Client.Status().Update(context.Background(), &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
+		if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
 			logger.Error(err, "Can't update the K8s github issue number from website github issue")
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, err
 		}
@@ -160,8 +162,8 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error")
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, err
 	}
-	githubi.Status.State = issue.State                                               // TODO: Is it the right place to update the issue?
-	if err := r.Client.Status().Update(context.Background(), &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
+	githubi.Status.State = issue.State                              // TODO: Is it the right place to update the issue?
+	if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
 		logger.Error(err, "Can't update the K8s status state with the real github issue, maybe because the github issue has already been closed")
 		return result, err
 	}
@@ -241,6 +243,25 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 // 	return resp, body, err
 // } // Fetch all github issues
 
+func postIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token string) ([]byte, error) {
+	apiURL := "https://api.github.com/repos/" + ownerRepo + "/issues"
+	issueData := GithubSend{Title: gituhubi.Spec.Title, Body: gituhubi.Spec.Description}
+	//make it json
+	jsonData, _ := json.Marshal(issueData)
+	//creating client to set custom headers for Authorization
+	client := &http.Client{}
+	fmt.Println("issueData ", issueData, ", jsonData", jsonData, "token ", token)
+	req, _ := http.NewRequest("POST", apiURL, bytes.NewReader(jsonData))
+	req.Header.Set("Authorization", "token "+token)
+	resp, err := client.Do(req)
+	if resp.Body != nil {
+		defer resp.Body.Close()
+	}
+	body, _ := ioutil.ReadAll(resp.Body)
+	fmt.Println("fmt - Hello from postIsuue, status = ", resp.StatusCode, " and http.StatusCreated = ", http.StatusCreated, " and err = ", err) // fmt option
+	return body, err
+} // Create a github issue
+
 func patchIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token string) ([]byte, error) {
 	apiURL := "https://api.github.com/repos/" + ownerRepo + "/issues/" + strconv.Itoa(gituhubi.Status.Number)
 	issueData := GithubSend{Title: gituhubi.Spec.Title, Body: gituhubi.Spec.Description}
@@ -256,25 +277,6 @@ func patchIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token s
 	}
 	body, _ := ioutil.ReadAll(resp.Body)
 	// fmt.Println("fmt - Hello from patchIsuue, status = ", resp.StatusCode, " and http.StatusCreated = ", http.StatusCreated, " and err = ", err, "body = ", resp.Body) // fmt option
-	return body, err
-} // Create a github issue
-
-func postIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token string) ([]byte, error) {
-	apiURL := "https://api.github.com/repos/" + ownerRepo + "/issues"
-	issueData := GithubSend{Title: gituhubi.Spec.Title, Body: gituhubi.Spec.Description}
-	//make it json
-	jsonData, _ := json.Marshal(issueData)
-	//creating client to set custom headers for Authorization
-	client := &http.Client{}
-	// fmt.Println("issueData ", issueData, ", jsonData", jsonData)
-	req, _ := http.NewRequest("POST", apiURL, bytes.NewReader(jsonData))
-	req.Header.Set("Authorization", "token "+token)
-	resp, err := client.Do(req)
-	if resp.Body != nil {
-		defer resp.Body.Close()
-	}
-	body, _ := ioutil.ReadAll(resp.Body)
-	// fmt.Println("fmt - Hello from postIsuue, status = ", resp.StatusCode, " and http.StatusCreated = ", http.StatusCreated, " and err = ", err, " and readErr = ", readErr) // fmt option
 	return body, err
 } // Create a github issue
 
