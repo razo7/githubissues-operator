@@ -52,5 +52,11 @@ spec:
           requests:
             cpu: 100m
             memory: 20Mi
+        env:
+        - name: GIT_TOKEN_GI
+          valueFrom:
+            secretKeyRef:
+              name: mysecret
+              key: github-token
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10

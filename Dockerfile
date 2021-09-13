@@ -15,8 +15,8 @@ COPY api/ api/
 COPY controllers/ controllers/
 
 # Add environment variable - Github Token
-ARG GIT_TOKEN_GI
-ENV GIT_TOKEN_GI="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"
+# ARG GIT_TOKEN_GI
+# ENV GIT_TOKEN_GI="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"
 
 # Build
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go

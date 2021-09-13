@@ -93,8 +93,8 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// fetch K8s GithubIssue - inspired by NHC controller
 	logger := r.Log.WithValues("githubssue", req.NamespacedName)
 	ownerRepo := "razo7/githubissues-operator" // TODO: Should be -> ownerRepo := githubi.Spec.Repo
-	token := os.Getenv("GIT_TOKEN_GI")         // store the github token you use in a secret and use it in the code by reading an env variable
-	token = "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"
+	// Run 'kubectl create secret generic mysecret --from-literal=github-token='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'' after 'make deploy'
+	token := os.Getenv("GIT_TOKEN_GI") // store the github token you use in a secret and use it in the code by reading an env variable
 	var myBody []byte
 
 	githubi := trainingv1alpha1.GithubIssue{}
@@ -258,7 +258,7 @@ func postIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token st
 		defer resp.Body.Close()
 	}
 	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Println("fmt - Hello from postIsuue, status = ", resp.StatusCode, " and http.StatusCreated = ", http.StatusCreated, " and err = ", err) // fmt option
+	// fmt.Println("fmt - Hello from postIsuue, status = ", resp.StatusCode, " and http.StatusCreated = ", http.StatusCreated, " and err = ", err) // fmt option
 	return body, err
 } // Create a github issue
 
