@@ -93,6 +93,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// fetch K8s GithubIssue - inspired by NHC controller
 	logger := r.Log.WithValues("githubssue", req.NamespacedName)
 	ownerRepo := "razo7/githubissues-operator" // TODO: Should be -> ownerRepo := githubi.Spec.Repo
+	// Good link for using secrets -> https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables
 	// Run 'kubectl create secret generic mysecret --from-literal=github-token='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'' after 'make deploy'
 	token := os.Getenv("GIT_TOKEN_GI") // store the github token you use in a secret and use it in the code by reading an env variable
 	var myBody []byte
@@ -167,81 +168,10 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		logger.Error(err, "Can't update the K8s status state with the real github issue, maybe because the github issue has already been closed")
 		return result, err
 	}
-	// // Use REST API, GET, to get all the Github issues which are online
-	// ownerRepo := "razo7/githubissues-operator" // TODO: Should be -> ownerRepo := githubi.Spec.Repo
-	// token := os.Getenv("GIT_TOKEN_GI")         // store the github token you use in a secret and use it in the code by reading an env variable
-	// resp, body, err := r.getIsuues(ownerRepo, token)
-	// if resp.StatusCode != http.StatusCreated && err != nil { // TODO: check OR Vs. AND
-	// 	logger.Error(err, "Unable to list issues due to an error", "resp.StatusCode", resp.StatusCode, "http.StatusCreated", http.StatusCreated)
-	// 	if resp.StatusCode == 404 { // when resp.StatusCode = 201 -> https://golangbyexample.com/201-http-status-response-golang/
-	// 		return result, nil
-	// 	} else {
-	// 		return result, err // not a NotExist error
-	// 	}
-	// } // if error
 
-	// Parse (or unfold) the Json file according to it's fields into issues variable for searcing for matching GithubIssue
-	// If it is matched and the description is different then update it, PATCH, and if there is no match then create it, POST
-	// var issues []GithubRecieve // Inspariation -> https://tutorialedge.net/golang/consuming-restful-api-with-go/
-	// json.Unmarshal(body, &issues)
-	// // Find the desired github issue
-	// var isExist bool // default value is false
-	// for _, issue := range issues {
-	// 	// logger.Info("My github issue ", "Issue ", issue)
-	// 	if issue.Title == githubi.Spec.Title {
-	// 		if issue.Description != githubi.Spec.Description { // update the description (if needed).
-	// 			// i.spec.description = githubi.Spec.Description
-	// 			_, err = patchIsuue(issue.Repo, githubi.Spec.Title, githubi.Spec.Description, token)
-	// 			if err != nil {
-	// 				logger.Error(err, "Can't update the description in repo's issue")
-	// 			}
-	// 		} else {
-	// 			githubi.Status.State = issue.State                                               // TODO: Is it the right place to update the issue?
-	// 			if err := r.Client.Status().Update(context.Background(), &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
-	// 				logger.Error(err, "Can't update the K8s status state with the real github issue")
-	// 				return ctrl.Result{}, err
-	// 			}
-	// 		}
-	// 		isExist = true
-	// 		break
-	// 	}
-	// } // for
-
-	// logger.Info("After seeking for a matching issue from Gitub to the K8s YAML", "isExist", isExist)
-	// if !isExist { //no matching issue, then create an issue
-	// 	resp, err = postIsuue(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, token)
-	// 	if err != nil {
-	// 		logger.Error(err, "Can't create new repo's issue")
-	// 	}
-	// }
-
-	// closeIssue() // TODO: write a proper call
 	logger.Info("End", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
 	return ctrl.Result{RequeueAfter: 60 * time.Second}, nil // tweak the resync period to every 1 minute.
 }
-
-// func (r *GithubIssueReconciler) getIsuues(ownerRepo string, token string) (*http.Response, []byte, error) {
-// 	apiURL := "https://api.github.com/repos/" + ownerRepo + "/issues"
-// 	client := &http.Client{}
-// 	req, _ := http.NewRequest("GET", apiURL, nil) // API for Github issues -> https://docs.github.com/en/rest/reference/issues#list-repository-issues
-// 	req.Header.Set("Authorization", "token "+token)
-// 	resp, err := client.Do(req)
-// 	if err != nil {
-// 		r.Log.Error(err, "No Repo was found")
-// 	}
-// 	if resp.Body != nil {
-// 		defer resp.Body.Close()
-// 	}
-
-// 	body, readErr := ioutil.ReadAll(resp.Body)
-// 	if readErr != nil {
-// 		r.Log.Error(readErr, "Can't read repo's issues")
-
-// 	}
-// 	// fmt.Println("fmt - Hello from getIsuues, status = ", resp.StatusCode, " and http.StatusCreated = ", http.StatusCreated, " and err = ", err, " and readErr = ", readErr) // fmt option
-// 	// fmt.Println("body is ", body)
-// 	return resp, body, err
-// } // Fetch all github issues
 
 func postIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token string) ([]byte, error) {
 	apiURL := "https://api.github.com/repos/" + ownerRepo + "/issues"
