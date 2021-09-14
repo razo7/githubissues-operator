@@ -94,7 +94,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	logger := r.Log.WithValues("githubssue", req.NamespacedName)
 	ownerRepo := "razo7/githubissues-operator" // TODO: Should be -> ownerRepo := githubi.Spec.Repo
 	// Good link for using secrets -> https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables
-	// Run 'kubectl create secret generic mysecret --from-literal=github-token='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'' after 'make deploy'
+	// Run 'kubectl create secret generic mysecret --from-literal=github-token=_PUBLIC_GITHUB_TOKEN after 'make deploy'
 	token := os.Getenv("GIT_TOKEN_GI") // store the github token you use in a secret and use it in the code by reading an env variable
 	var myBody []byte
 
