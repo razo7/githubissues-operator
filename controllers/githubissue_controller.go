@@ -22,7 +22,6 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 
 	trainingv1alpha1 "github.com/razo7/githubissues-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -44,6 +43,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -60,9 +60,8 @@ type GithubRecieve struct {
 	Title       string `json:"title"`
 	Description string `json:"body"` // It is called 'body' in the json file
 	State       string `json:"state,omitempty"`
-	Number      int    `json:"number,omitempty"` // TODO can it be number or integer?  -> https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.0.0.md#schemaObject
-	// LastUpdateTimestamp string      `json:"updated_at"`
-	// Name    string    `json:"name"`
+	Number      int    `json:"number,omitempty"`
+	// LastUpdateTimestamp string      `json:"updated_at"` //TODO: Do I need it?
 }
 
 // GithubSend - specify data fields for new github issue submission
@@ -92,14 +91,13 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// fetch K8s GithubIssue - inspired by NHC controller
 	logger := r.Log.WithValues("githubssue", req.NamespacedName)
-	ownerRepo := "razo7/githubissues-operator" // TODO: Should be -> ownerRepo := githubi.Spec.Repo
+
 	// Good link for using secrets -> https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables
 	// Run 'kubectl create secret generic mysecret --from-literal=github-token=_PUBLIC_GITHUB_TOKEN after 'make deploy'
 	token := os.Getenv("GIT_TOKEN_GI") // store the github token you use in a secret and use it in the code by reading an env variable
-	var myBody []byte
 
-	githubi := trainingv1alpha1.GithubIssue{}
-	result := ctrl.Result{}
+	githubi := trainingv1alpha1.GithubIssue{} // Empty GithubIssue
+	result := ctrl.Result{}                   // Empty Result
 	if err := r.Get(ctx, req.NamespacedName, &githubi); err != nil {
 		// Can get it because of delete or something else?
 
@@ -113,13 +111,14 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		// if githubi.ObjectMeta.creationTimestamp == nil {
 		// if the creationTimestamp is null then we should delete this issue from the website
-		logger.Info("before close issue")
-		body, err := closeIssue(ownerRepo, githubi, token)
-		myBody = body
-		if err != nil {
-			logger.Error(err, "Can't close the repo's issue")
-			return ctrl.Result{RequeueAfter: 10 * time.Second}, err // tweak the resync period to every 1 minute.
-		}
+		// logger.Info("before close issue")
+		// body, err := closeIssue(ownerRepo, githubi, token)
+		// myBody = body
+		// if err != nil {
+		// 	logger.Error(err, "Can't close the repo's issue")
+		// 	return ctrl.Result{RequeueAfter: 10 * time.Second}, err // tweak the resync period to every 1 minute.
+		// }
+
 		// }
 		logger.Info("I closed the repo's issue")
 		return ctrl.Result{RequeueAfter: 60 * time.Second}, nil // tweak the resync period to every 1 minute.
@@ -127,41 +126,49 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// If my K8s GithubIssue doesn't has an ID then create a new GithubIssue and update it's ID
 	// Otherwiese I have already created it earlier and it had an ID and I just update it's description
-	logger.Info("Looking for K8s YAML ID", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
-	var issue GithubRecieve
+	splitownerRepo := strings.Split(githubi.Spec.Repo, "github.com/") // extract from the repo url the repo's username and repo's name
+	var ownerRepo string
+	if len(splitownerRepo) > 1 {
+		ownerRepo = splitownerRepo[1]
+	} else {
+		logger.Info("Bad repo, should have been checked earlier, in the CRD level by webhook")
+		return result, nil
+	}
+	logger.Info("Looking for K8s YAML ID", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State, "ownerRepo", ownerRepo)
+	var issue GithubRecieve         // Storing the github issue from Github website
+	var jsonBody []byte             // Storing the github issue from Github website in a JSON format
 	if githubi.Status.Number == 0 { // Zero = uninitialized field
 		body, err := postIsuue(ownerRepo, githubi, token)
-		myBody = body
+		jsonBody = body
 		if err != nil {
 			logger.Error(err, "Can't create new repo's issue")
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, err
 		}
-
-		if err := json.Unmarshal(myBody, &issue); err != nil {
-			logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error")
-			return ctrl.Result{RequeueAfter: 10 * time.Second}, err
+		if err := json.Unmarshal(jsonBody, &issue); err != nil {
+			logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error - after post")
+			return result, err
 		}
 
-		githubi.Status.Number = issue.Number // Get the new issue number
+		githubi.Status.Number = issue.Number // set the new issue number
 		logger.Info("Get K8s YAML ID", "githubi.Status.Number", githubi.Status.Number, "githubi.Spec.Title", githubi.Spec.Title, "githubi.Status.State", githubi.Status.State, "githubi.Spec.Repo", githubi.Spec.Repo)
 		if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
-			logger.Error(err, "Can't update the K8s github issue number from website github issue")
-			return ctrl.Result{RequeueAfter: 10 * time.Second}, err
+			logger.Error(err, "Can't update the K8s github issue number from the issue in Github.com")
+			return result, err
 		}
 		// update ID and close end reconcile
-		return result, err // tweak the resync period to every 1 minute.
+
 	} else { // update the description (if needed).
 		body, err := patchIsuue(ownerRepo, githubi, token)
-		myBody = body
+		jsonBody = body
 		if err != nil {
 			logger.Error(err, "Can't update the description in repo's issue")
 			return result, err
 		}
 	}
 
-	if err := json.Unmarshal(myBody, &issue); err != nil {
-		logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error")
-		return ctrl.Result{RequeueAfter: 10 * time.Second}, err
+	if err := json.Unmarshal(jsonBody, &issue); err != nil {
+		logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error - after post/patch")
+		return result, err
 	}
 	githubi.Status.State = issue.State                              // TODO: Is it the right place to update the issue?
 	if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
@@ -180,7 +187,7 @@ func postIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token st
 	jsonData, _ := json.Marshal(issueData)
 	//creating client to set custom headers for Authorization
 	client := &http.Client{}
-	fmt.Println("issueData ", issueData, ", jsonData", jsonData, "token ", token)
+	// fmt.Println("issueData ", issueData, ", jsonData", jsonData, "token ", token)
 	req, _ := http.NewRequest("POST", apiURL, bytes.NewReader(jsonData))
 	req.Header.Set("Authorization", "token "+token)
 	resp, err := client.Do(req)
