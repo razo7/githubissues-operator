@@ -91,11 +91,6 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// fetch K8s GithubIssue - inspired by NHC controller
 	logger := r.Log.WithValues("githubssue", req.NamespacedName)
-
-	// Good link for using secrets -> https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables
-	// Run 'kubectl create secret generic mysecret --from-literal=github-token=_PUBLIC_GITHUB_TOKEN after 'make deploy'
-	token := os.Getenv("GIT_TOKEN_GI") // store the github token you use in a secret and use it in the code by reading an env variable
-
 	githubi := trainingv1alpha1.GithubIssue{} // Empty GithubIssue
 	result := ctrl.Result{}                   // Empty Result
 	if err := r.Get(ctx, req.NamespacedName, &githubi); err != nil {
@@ -109,8 +104,9 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			logger.Error(err, "Can't fetch Kubernetes github object", "object", githubi, "githubi.Status.Number", githubi.Status.Number)
 			return result, nil // tweak the resync period to every 1 minute.
 		}
+		return result, err
 		// if githubi.ObjectMeta.creationTimestamp == nil {
-		// if the creationTimestamp is null then we should delete this issue from the website
+		// // if the creationTimestamp is null then we should delete this issue from the website
 		// logger.Info("before close issue")
 		// body, err := closeIssue(ownerRepo, githubi, token)
 		// myBody = body
@@ -120,8 +116,8 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		// }
 
 		// }
-		logger.Info("I closed the repo's issue")
-		return ctrl.Result{RequeueAfter: 60 * time.Second}, nil // tweak the resync period to every 1 minute.
+		// logger.Info("I closed the repo's issue")
+		// return ctrl.Result{RequeueAfter: 60 * time.Second}, nil // tweak the resync period to every 1 minute.
 	} // Update	githubi with the Kubernetes github object
 
 	// If my K8s GithubIssue doesn't has an ID then create a new GithubIssue and update it's ID
@@ -135,10 +131,14 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return result, nil
 	}
 	logger.Info("Looking for K8s YAML ID", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State, "ownerRepo", ownerRepo)
-	var issue GithubRecieve         // Storing the github issue from Github website
-	var jsonBody []byte             // Storing the github issue from Github website in a JSON format
+	var issue GithubRecieve // Storing the github issue from Github website
+	var jsonBody []byte     // Storing the github issue from Github website in a JSON format
+	// Good link for using secrets -> https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables
+	// Run 'kubectl create secret generic mysecret --from-literal=github-token=_PUBLIC_GITHUB_TOKEN after 'make deploy'
+	token := os.Getenv("GIT_TOKEN_GI") // store the github token you use in a secret and use it in the code by reading an env variable
+
 	if githubi.Status.Number == 0 { // Zero = uninitialized field
-		body, err := postIsuue(ownerRepo, githubi, token)
+		body, err := postORpatchIsuue(ownerRepo, githubi, token, true)
 		jsonBody = body
 		if err != nil {
 			logger.Error(err, "Can't create new repo's issue")
@@ -158,7 +158,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		// update ID and close end reconcile
 
 	} else { // update the description (if needed).
-		body, err := patchIsuue(ownerRepo, githubi, token)
+		body, err := postORpatchIsuue(ownerRepo, githubi, token, false)
 		jsonBody = body
 		if err != nil {
 			logger.Error(err, "Can't update the description in repo's issue")
@@ -178,17 +178,25 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	logger.Info("End", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
 	return ctrl.Result{RequeueAfter: 60 * time.Second}, nil // tweak the resync period to every 1 minute.
-}
+} // Reconcile
 
-func postIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token string) ([]byte, error) {
-	apiURL := "https://api.github.com/repos/" + ownerRepo + "/issues"
+// postORpatchIsuue make a REST API to Githun.com to post or patch based on isPost parameter
+func postORpatchIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token string, isPost bool) ([]byte, error) {
 	issueData := GithubSend{Title: gituhubi.Spec.Title, Body: gituhubi.Spec.Description}
 	//make it json
 	jsonData, _ := json.Marshal(issueData)
 	//creating client to set custom headers for Authorization
 	client := &http.Client{}
+	var apiURL string
+	var req *http.Request
 	// fmt.Println("issueData ", issueData, ", jsonData", jsonData, "token ", token)
-	req, _ := http.NewRequest("POST", apiURL, bytes.NewReader(jsonData))
+	if isPost {
+		apiURL = "https://api.github.com/repos/" + ownerRepo + "/issues"
+		req, _ = http.NewRequest("POST", apiURL, bytes.NewReader(jsonData))
+	} else {
+		apiURL = "https://api.github.com/repos/" + ownerRepo + "/issues/" + strconv.Itoa(gituhubi.Status.Number)
+		req, _ = http.NewRequest("PATCH", apiURL, bytes.NewReader(jsonData))
+	}
 	req.Header.Set("Authorization", "token "+token)
 	resp, err := client.Do(req)
 	if resp.Body != nil {
@@ -197,25 +205,7 @@ func postIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token st
 	body, _ := ioutil.ReadAll(resp.Body)
 	// fmt.Println("fmt - Hello from postIsuue, status = ", resp.StatusCode, " and http.StatusCreated = ", http.StatusCreated, " and err = ", err) // fmt option
 	return body, err
-} // Create a github issue
-
-func patchIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token string) ([]byte, error) {
-	apiURL := "https://api.github.com/repos/" + ownerRepo + "/issues/" + strconv.Itoa(gituhubi.Status.Number)
-	issueData := GithubSend{Title: gituhubi.Spec.Title, Body: gituhubi.Spec.Description}
-	//make it json
-	jsonData, _ := json.Marshal(issueData)
-	//creating client to set custom headers for Authorization
-	client := &http.Client{}
-	req, _ := http.NewRequest("PATCH", apiURL, bytes.NewReader(jsonData))
-	req.Header.Set("Authorization", "token "+token)
-	resp, err := client.Do(req)
-	if resp.Body != nil {
-		defer resp.Body.Close()
-	}
-	body, _ := ioutil.ReadAll(resp.Body)
-	// fmt.Println("fmt - Hello from patchIsuue, status = ", resp.StatusCode, " and http.StatusCreated = ", http.StatusCreated, " and err = ", err, "body = ", resp.Body) // fmt option
-	return body, err
-} // Create a github issue
+} // postORpatchIsuue
 
 func closeIssue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token string) ([]byte, error) {
 	apiURL := "https://api.github.com/repos/" + ownerRepo + "/issues/" + strconv.Itoa(gituhubi.Status.Number)
@@ -234,7 +224,7 @@ func closeIssue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token s
 	body, _ := ioutil.ReadAll(resp.Body)
 	// fmt.Println("fmt - Hello from closeIsuue, status = ", resp.StatusCode, " and http.StatusCreated = ", http.StatusCreated, " and err = ", err, "body = ", resp.Body) // fmt option
 	return body, err
-} // Create a github issue
+} // closeIssue
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *GithubIssueReconciler) SetupWithManager(mgr ctrl.Manager) error {
