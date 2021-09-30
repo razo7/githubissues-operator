@@ -45,6 +45,7 @@ spec:
                 type: string
               repo:
                 description: Represent the github repo's URL - e.g https://github.com/rgolangh/dotfiles
+                pattern: ^https?:\/\/github.com+/[a-zA-Z0-9\_.-]+/[a-zA-Z0-9\_.-]
                 type: string
               title:
                 description: The title of the issue

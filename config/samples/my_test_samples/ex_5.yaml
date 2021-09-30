@@ -4,7 +4,7 @@ metadata:
   name: githubissue-sample5
 spec:
   # Add fields here
-  repo: https://github.com/razo7/githubissues-operator
+  repo: https://github.com/razo/githubissues-operator
   title: K8s Fifth Issue
   description: Hi 5
   labels: help wanted
