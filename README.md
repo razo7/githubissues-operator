@@ -12,18 +12,19 @@ The mission is at [Google Doc](https://docs.google.com/document/d/1z1bqlnBL8GO1F
     + gathering Github token from environment variable (by a secret)
     + checking if this issue is new, is the Number field zero?, if so then create an API call to create it with the basic parameters it has and set it's Number for next time (by changing the Status). If this is an old issue, Number field is greater than zero, then create an API call to update it with the basic parameters.
     + update the K8s object Status.State with Status.State from the Github.com issue and reconcile again after a minute.
-+ CRD validation (currently diasbled due to the try to test the unit tests) of the Spec.Repo field by cheking it's pattern with kubebuilder.
-
-## Started & Unfinished Work
++ CRD validation of the Spec.Repo field by cheking it's pattern with kubebuilder.
 + Writing unit tests for the following cases (they should pass and cover):
     + failed attempt to create a real github issue
-    + failed attempt to update an issue
     + create if issue not exist
+
+
+## Ongoing Work
++ Writing unit tests for the following cases (they should pass and cover):
+    + failed attempt to update an issue ?
     + close issues on delete
-* The logic is already there ('controllers/githubissue_controller_test.go') but I couldn't test them properly, due to a probelm with my cluster.
+
 
 ## Future Work
-
 + implement deletion behaviour. A delete of the k8s object, triggers the github issue to be deleted. I need to address it  with finalizers (pronbably delete as well my closeIssue function from 'controllers/githubissue_controller.go').
 + Running Webhook cluster
 + Enabling to create issues with 'Lables' field, or other useful fields.
