@@ -134,10 +134,9 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	var issue GithubRecieve // Storing the github issue from Github website
 	var jsonBody []byte     // Storing the github issue from Github website in a JSON format
 	// Good link for using secrets -> https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables
-	// Run 'kubectl create secret generic mysecret --from-literal=github-token=_PUBLIC_GITHUB_TOKEN after 'make deploy'
+	// Run 'kubectl create secret generic mysecret --from-literal=github-token=PUBLIC_GITHUB_TOKEN after 'make deploy'
 	token := os.Getenv("GIT_TOKEN_GI") // store the github token you use in a secret and use it in the code by reading an env variable
-
-	if githubi.Status.Number == 0 { // Zero = uninitialized field
+	if githubi.Status.Number == 0 {    // Zero = uninitialized field
 		body, err := postORpatchIsuue(ownerRepo, githubi, token, true)
 		jsonBody = body
 		if err != nil {
@@ -197,13 +196,14 @@ func postORpatchIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, t
 		apiURL = "https://api.github.com/repos/" + ownerRepo + "/issues/" + strconv.Itoa(gituhubi.Status.Number)
 		req, _ = http.NewRequest("PATCH", apiURL, bytes.NewReader(jsonData))
 	}
+	// fmt.Println("fmt - = apiURL ", apiURL, " and token = ", token) // fmt option
 	req.Header.Set("Authorization", "token "+token)
 	resp, err := client.Do(req)
 	if resp.Body != nil {
 		defer resp.Body.Close()
 	}
 	body, _ := ioutil.ReadAll(resp.Body)
-	// fmt.Println("fmt - Hello from postIsuue, status = ", resp.StatusCode, " and http.StatusCreated = ", http.StatusCreated, " and err = ", err) // fmt option
+	// fmt.Println("fmt - Hello from postORpatchIsuue, isPost =", isPost, ", status = ", resp.StatusCode, ", http.StatusCreated = ", http.StatusCreated, " and err = ", err) // fmt option
 	return body, err
 } // postORpatchIsuue
 

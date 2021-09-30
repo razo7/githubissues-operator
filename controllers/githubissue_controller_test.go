@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -33,8 +32,8 @@ var _ = Describe("GithubIssue controller", func() {
 
 	// Define utility constants for object names and testing timeouts/durations and intervals.
 	const (
-		GithubIssueName      = "test-githubissue"
-		GithubIssueNamespace = "default"
+		GithubIssueName      = "test-githubissue" // "test-githubissue"
+		GithubIssueNamespace = "default"          // "githubissues-operator-system"
 		JobName              = "test-job"
 
 		timeout  = time.Second * 3
@@ -42,15 +41,14 @@ var _ = Describe("GithubIssue controller", func() {
 		interval = time.Millisecond * 250
 	)
 	var (
-		githubi, githubIssue trainingv1alpha1.GithubIssue
+		githubIssue          trainingv1alpha1.GithubIssue
 		githubIssueLookupKey types.NamespacedName
 		ctx                  context.Context
 	)
 	Context("GithubIssue Four Unit Tests", func() {
+		githubIssueLookupKey = types.NamespacedName{Name: GithubIssueName, Namespace: GithubIssueNamespace}
 		BeforeEach(func() {
 			ctx = context.Background()
-			// githubi = trainingv1alpha1.GithubIssue{} // Empty GithubIssue
-			// githubIssueLookupKey = types.NamespacedName{Name: GithubIssueName, Namespace: GithubIssueNamespace}
 			githubIssue = trainingv1alpha1.GithubIssue{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "batch.tutorial.kubebuilder.io/v1",
@@ -86,93 +84,72 @@ var _ = Describe("GithubIssue controller", func() {
 				Expect(k8sClient.Create(ctx, &githubIssue)).Should(Succeed())
 			}) //it - test 2
 
-			It("should succed again ", func() {
-				By("use an empty repo")
-				Expect(k8sClient.Create(ctx, &githubi)).Should(Succeed())
-			}) //it - test 3
-			It("should fail due to a bad repo ", func() {
-				By("use a bad repo")
-				badgithubIssue := &trainingv1alpha1.GithubIssue{
-					TypeMeta: metav1.TypeMeta{
-						APIVersion: "batch.tutorial.kubebuilder.io/v1",
-						Kind:       "GithubIssue",
-					},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      GithubIssueName,
-						Namespace: GithubIssueNamespace,
-					},
-					Spec: trainingv1alpha1.GithubIssueSpec{
-						Repo:        "ubissues-operator",
-						Title:       " ",
-						Description: " ",
-					},
-					Status: trainingv1alpha1.GithubIssueStatus{
-						State:               " ",
-						LastUpdateTimestamp: " ",
-						Number:              0,
-					},
-				}
-				Expect(len(strings.Split(badgithubIssue.Spec.Repo, "github.com/"))).To(BeNumerically("==", 1))
-				Eventually(func() error {
-					return k8sClient.Create(ctx, badgithubIssue)
-					// return k8sClient.Get(ctx, githubIssueLookupKey, badgithubIssue)
-				}, timeout, interval).Should(HaveOccurred())
+			// It("should fail due to a bad repo ", func() {
+			// 	By("use a bad repo")
+			// 	badgithubIssue := &trainingv1alpha1.GithubIssue{
+			// 		TypeMeta: metav1.TypeMeta{
+			// 			APIVersion: "batch.tutorial.kubebuilder.io/v1",
+			// 			Kind:       "GithubIssue",
+			// 		},
+			// 		ObjectMeta: metav1.ObjectMeta{
+			// 			Name:      GithubIssueName,
+			// 			Namespace: GithubIssueNamespace,
+			// 		},
+			// 		Spec: trainingv1alpha1.GithubIssueSpec{
+			// 			Repo:        "ubissues-operator",
+			// 			Title:       " ",
+			// 			Description: " ",
+			// 		},
+			// 		Status: trainingv1alpha1.GithubIssueStatus{
+			// 			State:               " ",
+			// 			LastUpdateTimestamp: " ",
+			// 			Number:              0,
+			// 		},
+			// 	}
+			// 	Expect(len(strings.Split(badgithubIssue.Spec.Repo, "github.com/"))).To(BeNumerically("==", 1))
+			// 	Eventually(func() error {
+			// 		return k8sClient.Create(ctx, badgithubIssue)
+			// 		// return k8sClient.Get(ctx, githubIssueLookupKey, badgithubIssue)
+			// 	}, timeout, interval).Should(HaveOccurred())
 
-				// Expect(k8sClient.Create(ctx, badgithubIssue)).Should(Succeed())
+			// 	// Expect(k8sClient.Create(ctx, badgithubIssue)).Should(Succeed())
 
-			}) // It - 4
+			// }) // It - 3
 
 		}) // when - 2
 
 		When("we test updating an issue", func() {
-			It("should set state to 'run'", func() {
-				Eventually(func() bool {
-					By("change Status.State")
-					githubi.Status.State = "run"
-					err := k8sClient.Status().Update(ctx, &githubi)
-					if err != nil {
-						return false
-					}
-					return true
-				}, timeout, interval).Should(BeTrue())
-			}) //it- test 5
+			It("should set state to 'closed'", func() {
+				By("change Status.State")
+				Expect(k8sClient.Get(ctx, githubIssueLookupKey, &githubIssue)).Should(Succeed())
+				githubIssue.Status.State = "closed"
+				Expect(k8sClient.Status().Update(ctx, &githubIssue)).Should(Succeed())
+			}) //it- test 4
+
 			It("should set number to two ", func() {
-				Eventually(func() bool {
-					By("change Status.Number")
-					githubi.Status.Number = 2 // set the new issue number
-					err := k8sClient.Status().Update(ctx, &githubi)
-					if err != nil {
-						return false
-					}
-					return true
-				}, timeout, interval).Should(BeTrue())
-			}) //it- test 6
+				Expect(k8sClient.Get(ctx, githubIssueLookupKey, &githubIssue)).Should(Succeed())
+				githubIssue.Status.Number = 2 // set the new issue number
+				Expect(k8sClient.Status().Update(ctx, &githubIssue)).Should(Succeed())
+
+			}) //it- test 5
 		}) // when - 3
 
 		When("creating an issue", func() {
 			It("should check if the issue isn't currently exist", func() {
 				By("check if number field is larger than zero")
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, githubIssueLookupKey, &githubi)
-					if err != nil {
-						return false
-					}
-					return true
-				}, timeout, interval).Should(BeTrue())
-				Expect(githubi.Status.Number).To(BeNumerically(">", 0))
-				if githubi.Status.Number < 1 {
-					Expect(k8sClient.Create(ctx, &githubi)).Should(Succeed())
-				}
-			}) //it- test 7
+				Expect(k8sClient.Get(ctx, githubIssueLookupKey, &githubIssue)).Should(Succeed())
+				// Expect(githubIssue.Status.Number).To(BeNumerically(">", 0)) // another option
+				Expect(githubIssue.Status.Number).To(Not(Equal(0)))
+			}) //it- test 6
 		}) // when - 4
 
-		When("deleting all issues", func() {
-			It("should close all the issues", func() {
-				By("change the status to 'close' for each issue")
-				Expect(k8sClient.Delete(ctx, &githubi)).Should(Succeed())
-			}) // it - test 8
-		}) // when - 5
+		// When("deleting all issues", func() {
+		// 	It("should close all the issues", func() {
+		// 		By("change the status to 'close' for each issue")
+		// 		Expect(k8sClient.Delete(ctx, &githubi)).Should(Succeed())
+		// 	}) // it - test 7
+		// }) // when - 5
 
-	})
+	}) //context
 
 })

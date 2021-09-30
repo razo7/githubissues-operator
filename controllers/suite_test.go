@@ -69,17 +69,19 @@ var _ = BeforeSuite(func() {
 
 	//+kubebuilder:scaffold:scheme
 
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
-	Expect(err).NotTo(HaveOccurred())
-	Expect(k8sClient).NotTo(BeNil())
-
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme.Scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
 
+	// k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+	k8sClient = k8sManager.GetClient()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(k8sClient).NotTo(BeNil())
+
 	err = (&GithubIssueReconciler{
-		Client: k8sManager.GetClient(),
+		Client: k8sClient,
+		// Client: k8sManager.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("GithubIssue-suite"),
 		Scheme: k8sManager.GetScheme(),
 	}).SetupWithManager(k8sManager)
