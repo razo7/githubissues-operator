@@ -4,7 +4,7 @@ metadata:
   name: githubissue-sample4
 spec:
   # Add fields here
-  repo: https://github.om/razo7/githubissues-operator
-  title: K8s Fourth Issue
+  repo: https://sdssdgithub.com/razo7/githubissues-operator
+  title: K8s Fourth Issue - pattern problem
   description: Hi 4
   labels: documentation
