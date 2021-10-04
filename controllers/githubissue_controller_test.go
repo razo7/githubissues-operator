@@ -33,10 +33,11 @@ var _ = Describe("GithubIssue controller", func() {
 
 	// Define utility constants for object names and testing timeouts/durations and intervals.
 	const (
-		GoodGithubIssueName  = "good-githubissue"
-		BadGithubIssueName   = "bad-githubissue"
-		GithubIssueNamespace = "default" // "githubissues-operator-system"
-		JobName              = "test-job"
+		GoodGithubIssueName     = "good-githubissue"
+		BadGithubIssueName      = "bad-githubissue"
+		ToDeleteGithubIssueName = "Delete-githubissue"
+		GithubIssueNamespace    = "default" // "githubissues-operator-system"
+		JobName                 = "test-job"
 
 		timeout  = time.Second * 3
 		duration = time.Second * 3
@@ -178,12 +179,39 @@ var _ = Describe("GithubIssue controller", func() {
 			}) //it- test 5
 		}) // when - 3
 
-		// When("deleting all issues", func() {
-		// 	It("should close all the issues", func() {
-		// 		By("change the status to 'close' for each issue")
-		// 		Expect(k8sClient.Delete(ctx, &githubIssue)).Should(Succeed())
-		// 	}) // it - test 6
-		// }) // when - 4
+		When("deleting an issue", func() {
+			It("should change state to close for this issue", func() {
+				By("change the status to 'close' for each issue")
+				goodGithubIssueLookupKeyToDelete := types.NamespacedName{Name: ToDeleteGithubIssueName, Namespace: GithubIssueNamespace}
+				githubIssueToDelete := trainingv1alpha1.GithubIssue{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "batch.tutorial.kubebuilder.io/v1",
+						Kind:       "GithubIssue",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      GoodGithubIssueName,
+						Namespace: GithubIssueNamespace,
+					},
+					Spec: trainingv1alpha1.GithubIssueSpec{
+						Repo:        "https://github.com/razo7/githubissues-operator",
+						Title:       "K8s good Issue",
+						Description: "Hi from testing K8s",
+					},
+					Status: trainingv1alpha1.GithubIssueStatus{
+						State:               " ",
+						LastUpdateTimestamp: " ",
+					},
+				} // githubIssue
+				Expect(k8sClient).To(Not(BeNil()))
+				err := k8sClient.Create(ctx, &githubIssueToDelete)
+				Expect(err).NotTo(HaveOccurred())
+				Eventually(func() error {
+					return k8sClient.Get(ctx, goodGithubIssueLookupKeyToDelete, &githubIssueToDelete)
+				}, timeout, interval).Should(Succeed())
+				// after creating the issue, now try to delete it
+				Expect(k8sClient.Delete(ctx, &githubIssueToDelete)).Should(Succeed())
+			}) // it - test 6
+		}) // when - 4
 
 	}) //context
 

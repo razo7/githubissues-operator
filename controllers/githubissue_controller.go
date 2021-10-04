@@ -64,7 +64,6 @@ type GithubRecieve struct {
 	Description string `json:"body"` // It is called 'body' in the json file
 	State       string `json:"state,omitempty"`
 	Number      int    `json:"number,omitempty"`
-	// LastUpdateTimestamp string      `json:"updated_at"` //TODO: Do I need it?
 }
 
 // GithubSend - specify data fields for new github issue submission
@@ -73,7 +72,7 @@ type GithubSend struct {
 	Body        string `json:"body,omitempty"`
 	State       string `json:"state,omitempty"`
 	ClosingTime string `json:"closed_at,omitempty"`
-	// Labels 	string 	`json:"labels` /// TODO: add label functionality
+	// Labels      string `json:"labels` /// TODO: add label functionality
 
 }
 
@@ -96,19 +95,20 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	githubi := trainingv1alpha1.GithubIssue{} // Empty GithubIssue
 	result := ctrl.Result{}                   // Empty Result
 	if err := r.Get(ctx, req.NamespacedName, &githubi); err != nil {
-		if githubi.Status.Number == 0 { // if we can't fetch the issue after deleting it
+		if githubi.Status.Number == 0 { // if we can't fetch the issue after deleting it then stop it (we got here due to the last update)
 			return result, nil
 		}
-		if apierrors.IsNotFound(err) { //TODO: Do I reach to overhere?
-			logger.Error(err, "Can't fetch Kubernetes github object", "object")
+		if apierrors.IsNotFound(err) {
+			logger.Error(err, "Can't fetch Kubernetes github object", "object") //TODO: Do I reach to here?
 			return result, nil
 		}
 		return result, err
-	} // Update	githubi with the Kubernetes github object
+	}
 
-	ownerRepo := strings.Split(githubi.Spec.Repo, "github.com/")[1] // extract from the repo url the repo's username and repo's name
+	ownerRepo := strings.Split(githubi.Spec.Repo, "github.com/")[1] // extract the repo's username, and repo's name from the repo's url
 	// Good link for using secrets -> https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables
 	token := os.Getenv("GIT_TOKEN_GI") // store the github token you use in a secret and use it in the code by reading an env variable
+
 	// register finalizer once the CR enters the reconcile
 	myFinalizerName := "batch.tutorial.kubebuilder.io/finalizer"
 	if githubi.Status.LastUpdateTimestamp == "" {
@@ -122,8 +122,8 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// examine DeletionTimestamp to determine if object is under deletion
 	if !githubi.ObjectMeta.DeletionTimestamp.IsZero() {
 		// The object is being deleted
-		if containsString(githubi.GetFinalizers(), myFinalizerName) {
-			err := closeIssue(ownerRepo, githubi, token) // change the state and closing time of the Github Issue
+		if containsString(githubi.GetFinalizers(), myFinalizerName) { // https://book.kubebuilder.io/reference/using-finalizers.html
+			err := closeIssue(ownerRepo, githubi, token) // send an API call to change the state and closing time of the Github Issue
 			if err != nil {
 				logger.Error(err, "Can't close the repo's issue- API problem")
 				return result, err
@@ -141,7 +141,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// If my K8s GithubIssue doesn't have an ID then create a new GithubIssue and update it's ID
 	// Otherwiese I have already created it earlier and it had an ID and I just update it's description
-	logger.Info("Looking for K8s YAML ID", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State, "ownerRepo", ownerRepo)
+	logger.Info("Looking for K8s YAML ID", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
 	var issue GithubRecieve // Storing the github issue from Github website
 	var jsonBody []byte     // Storing the github issue from Github website in a JSON format
 
@@ -156,10 +156,10 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			}
 			if resp.StatusCode != 201 { // https://docs.github.com/en/rest/reference/issues#create-an-issue
 				logger.Info("Not valid repo- change the state", "repo", ownerRepo)
-				githubi.Status.State = "Fail repo"                              // TODO: Is it the right place to update the issue?
+				githubi.Status.State = "Fail repo"
 				githubi.Status.LastUpdateTimestamp = time.Now().String()        // update LastUpdateTimestamp field
 				if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
-					logger.Error(err, "Can't update the K8s status state with the 'Fail repo' after POST") //TODO:something
+					logger.Error(err, "Can't update the K8s status state with the 'Fail repo' after POST")
 					return result, err
 				}
 				return result, nil
@@ -171,12 +171,11 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 			githubi.Status.Number = issue.Number                     // set the new issue number
 			githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
-			logger.Info("Get K8s YAML ID", "githubi.Status.Number", githubi.Status.Number, "githubi.Spec.Title", githubi.Spec.Title, "githubi.Status.State", githubi.Status.State, "githubi.Spec.Repo", githubi.Spec.Repo)
-			if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
+			logger.Info("Get K8s YAML ID", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
+			if err := r.Client.Status().Update(ctx, &githubi); err != nil {
 				logger.Error(err, "Can't update the K8s github issue number from the issue in Github.com")
 				return result, err
 			}
-			// update ID and close end reconcile
 
 		} else { // update the description (if needed).
 			resp, body, err := postORpatchIsuue(ownerRepo, githubi, token, false)
@@ -186,9 +185,9 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			}
 			if resp.StatusCode != 200 {
 				logger.Info("Bad repo, there is no repo -", ownerRepo, " in github.com")
-				githubi.Status.State = "Fail repo"                              // TODO: Is it the right place to update the issue?
-				if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
-					logger.Error(err, "Can't update the K8s status state with the 'Fail repo' after PATCH") //TODO:something
+				githubi.Status.State = "Fail repo"
+				if err := r.Client.Status().Update(ctx, &githubi); err != nil {
+					logger.Error(err, "Can't update the K8s status state with the 'Fail repo' after PATCH")
 					return result, err
 				}
 			} // if -status error
@@ -199,11 +198,13 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error - after post/patch")
 			return result, err
 		}
-		githubi.Status.State = issue.State                              // TODO: Is it the right place to update the issue?
-		githubi.Status.LastUpdateTimestamp = time.Now().String()        // update LastUpdateTimestamp field
-		if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
-			logger.Error(err, "Can't update the K8s status state with the real github issue, maybe because the github issue has already been closed")
-			return result, err
+		if githubi.Spec.Description != issue.Description { // Is there a change in the description?
+			githubi.Status.State = issue.State
+			githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
+			if err := r.Client.Status().Update(ctx, &githubi); err != nil {
+				logger.Error(err, "Can't update the K8s status state with the real github issue, maybe because the github issue has already been closed")
+				return result, err
+			}
 		}
 
 		logger.Info("End", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
@@ -250,7 +251,6 @@ func postORpatchIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, t
 		apiURL = "https://api.github.com/repos/" + ownerRepo + "/issues/" + strconv.Itoa(gituhubi.Status.Number)
 		req, _ = http.NewRequest("PATCH", apiURL, bytes.NewReader(jsonData))
 	}
-	// fmt.Println("fmt - = apiURL ", apiURL, " and token = ", token) // fmt option
 	req.Header.Set("Authorization", "token "+token)
 	resp, err := client.Do(req)
 	if resp.Body != nil {
@@ -263,7 +263,7 @@ func postORpatchIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, t
 
 func closeIssue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token string) error {
 	apiURL := "https://api.github.com/repos/" + ownerRepo + "/issues/" + strconv.Itoa(gituhubi.Status.Number)
-	issueData := GithubSend{State: "closed", ClosingTime: time.Now().Format("2006-01-02 15:04:05")} // TODO: Maybe it is "close", formating time -> https://stackoverflow.com/questions/33119748/convert-time-time-to-string
+	issueData := GithubSend{State: "closed", ClosingTime: time.Now().Format("2006-01-02 15:04:05")} // formating time -> https://stackoverflow.com/questions/33119748/convert-time-time-to-string
 	//make it json
 	jsonData, _ := json.Marshal(issueData)
 	//creating client to set custom headers for Authorization
@@ -284,3 +284,17 @@ func (r *GithubIssueReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&trainingv1alpha1.GithubIssue{}).
 		Complete(r)
 }
+
+// layout := "2006-01-02 15:04:05 +0300 IDT m=+5"
+// lastUpdateTime, err := time.Parse(layout, githubi.Status.LastUpdateTimestamp)
+// if err != nil {
+// 	logger.Error(err, "Can't parse the time")
+// 	return result, err
+// }
+// currTime := time.Now()
+// fmt.Println("Hi print 1")
+// fmt.Println("curr time = ", currTime, "\nlast time = ", githubi.Status.LastUpdateTimestamp, "\ndifference = ", currTime.Sub(lastUpdateTime))
+// fmt.Println("diff = ", currTime.Sub(lastUpdateTime), "\ndiff mili= ", currTime.Sub(lastUpdateTime).Milliseconds(), "\ndifference nano = ", currTime.Sub(lastUpdateTime).Nanoseconds())
+// if (currTime.Sub(lastUpdateTime)).Seconds() < 15500 { // don't update the description if it the last update was less than a second, otherwise it results in an endless loop
+// 	return result, nil
+// }
