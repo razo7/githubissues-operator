@@ -16,14 +16,14 @@ The mission is at [Google Doc](https://docs.google.com/document/d/1z1bqlnBL8GO1F
 + Writing unit tests for the following cases (they should pass and cover):
     + failed attempt to create a real github issue
     + create if issue not exist
+    + failed attempt to update an issue
 + implement deletion behaviour. A delete of the k8s object, triggers the github issue to be deleted.
 
 ## Ongoing Work
 + Writing unit tests for the following cases (they should pass and cover):
-    + failed attempt to update an issue ?
-    + close issue on delete
-
+    + close issue on delete (check is good but somehow it don't delete the CR...)
++ Running Webhook cluster
 
 ## Future Work
-+ Running Webhook cluster
+
 + Enabling to create issues with 'Lables' field, or other useful fields.
