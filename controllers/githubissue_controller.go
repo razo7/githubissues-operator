@@ -19,7 +19,8 @@ package controllers
 //	How to create this repo? Follow the next two lines
 //	operator-sdk init --domain githubissues --repo github.com/razo7/githubissues-operator --owner "Or Raz"
 //	operator-sdk create api --group training --version v1alpha1 --kind GithubIssue --resource --controller
-//  run 'kubectl create secret generic mysecret --from-literal=github-token=PUBLIC_GITHUB_TOKEN' after 'make deploy'
+//  run 'kubectl create secret generic mysecret --from-literal=github-token=PUBLIC_GITHUB_TOKEN -n githubissues-operator-system'
+//  after 'make deploy'
 //  and 'kubectl delete secret mysecret' to delete it
 
 import (
@@ -123,6 +124,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if !githubi.ObjectMeta.DeletionTimestamp.IsZero() {
 		// The object is being deleted
 		if containsString(githubi.GetFinalizers(), myFinalizerName) { // https://book.kubebuilder.io/reference/using-finalizers.html
+			githubi.Status.State = "closed"
 			err := closeIssue(ownerRepo, githubi, token) // send an API call to change the state and closing time of the Github Issue
 			if err != nil {
 				logger.Error(err, "Can't close the repo's issue- API problem")
@@ -151,7 +153,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			resp, body, err := postORpatchIsuue(ownerRepo, githubi, token, true)
 			jsonBody = body
 			if err != nil {
-				logger.Error(err, "Can't create new repo's issue")
+				logger.Error(err, "Can't create new repo's issue") //TODO: Do I reach to here 2?
 				return result, err
 			}
 			if resp.StatusCode != 201 { // https://docs.github.com/en/rest/reference/issues#create-an-issue
@@ -180,7 +182,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		} else { // update the description (if needed).
 			resp, body, err := postORpatchIsuue(ownerRepo, githubi, token, false)
 			if err != nil {
-				logger.Error(err, "Can't update the description in repo's issue")
+				logger.Error(err, "Can't update the description in repo's issue") //TODO: Do I reach to here 3?
 				return result, err
 			}
 			if resp.StatusCode != 200 {
@@ -199,6 +201,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return result, err
 		}
 		if githubi.Spec.Description != issue.Description { // Is there a change in the description?
+			githubi.Spec.Description = issue.Description
 			githubi.Status.State = issue.State
 			githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
 			if err := r.Client.Status().Update(ctx, &githubi); err != nil {
@@ -210,7 +213,14 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		logger.Info("End", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
 		return ctrl.Result{RequeueAfter: 60 * time.Second}, nil // tweak the resync period to every 1 minute.
 	} else {
-		// TODO: should I delete the resource
+
+		// TODO: should I delete the resource?
+		// remove our finalizer from the list and update it.
+		controllerutil.RemoveFinalizer(&githubi, myFinalizerName)
+		if err := r.Update(ctx, &githubi); err != nil {
+			logger.Error(err, "Can't close the repo's issue - update problem")
+			return result, err
+		}
 		return result, nil
 	} // if -Fail repo
 } // Reconcile
