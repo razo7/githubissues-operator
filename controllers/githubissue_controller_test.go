@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"os"
 	"time"
 
 	// "github.com/google/go-cmp/cmp/internal/function"
@@ -36,7 +37,7 @@ var _ = Describe("GithubIssue controller", func() {
 		GoodGithubIssueName     = "good-githubissue"
 		BadGithubIssueName      = "bad-githubissue"
 		ToDeleteGithubIssueName = "Delete-githubissue"
-		GithubIssueNamespace    = "default" // "githubissues-operator-system"
+		GithubIssueNamespace    = "default"
 		JobName                 = "test-job"
 
 		timeout  = time.Second * 3
@@ -163,6 +164,42 @@ var _ = Describe("GithubIssue controller", func() {
 			}) //it- test 4
 		}) // when - 2
 
+		When("we test update Github.com - POST REST API problems", func() {
+			token := os.Getenv("GIT_TOKEN_GI")
+			It("shouldn't succed due to bad repo", func() {
+				Expect(k8sClient.Get(ctx, goodGithubIssueLookupKey, &githubIssue)).Should(Succeed())
+				resp, _, err := postORpatchIsuue("razo/githubissues-operator", githubIssue, token, true)
+				Expect(err).To(BeNil())
+				Expect(resp.StatusCode).To(Equal(201))
+			}) // it - test 5
+			It("shouldn't succed due to bad token", func() {
+				Expect(k8sClient.Get(ctx, goodGithubIssueLookupKey, &githubIssue)).Should(Succeed())
+
+				resp, _, err := postORpatchIsuue("razo7/githubissues-operator", githubIssue, token+"something", true)
+				Expect(err).To(BeNil())
+				Expect(resp.StatusCode).To(Equal(201))
+			}) // it - test 6
+
+		}) // when -3
+
+		When("we test update Github.com - PATCH REST API problems", func() {
+			token := os.Getenv("GIT_TOKEN_GI")
+			It("shouldn't succed due to bad repo", func() {
+				Expect(k8sClient.Get(ctx, goodGithubIssueLookupKey, &githubIssue)).Should(Succeed())
+				resp, _, err := postORpatchIsuue("razo/githubissues-operator", githubIssue, token, true)
+				Expect(err).To(BeNil())
+				Expect(resp.StatusCode).To(Equal(200))
+			}) // it - test 7
+			It("shouldn't succed due to bad token", func() {
+				Expect(k8sClient.Get(ctx, goodGithubIssueLookupKey, &githubIssue)).Should(Succeed())
+
+				resp, _, err := postORpatchIsuue("razo7/githubissues-operator", githubIssue, token+"something", true)
+				Expect(err).To(BeNil())
+				Expect(resp.StatusCode).To(Equal(200))
+			}) // it - test 8
+
+		}) // when -4
+
 		When("creating an issue", func() {
 			It("should check if the issue isn't currently exist", func() {
 				By("check if number field is larger than zero")
@@ -176,10 +213,10 @@ var _ = Describe("GithubIssue controller", func() {
 
 				// Expect(githubIssue.Status.Number).To(BeNumerically(">", 0)) // another option
 				// Expect(githubIssue.Status.Number).To(Not(Equal(0)))
-			}) //it- test 5
-		}) // when - 3
+			}) //it- test 9
+		}) // when - 5
 
-		When("deleting an issue", func() {
+		When("we delete an issue", func() {
 			It("should change state to close for this issue", func() {
 				By("change the status to 'close' for each issue")
 				goodGithubIssueLookupKeyToDelete := types.NamespacedName{Name: ToDeleteGithubIssueName, Namespace: GithubIssueNamespace}
@@ -210,8 +247,14 @@ var _ = Describe("GithubIssue controller", func() {
 				}, timeout, interval).Should(Succeed())
 				// after creating the issue, now try to delete it
 				Expect(k8sClient.Delete(ctx, &githubIssueToDelete)).Should(Succeed())
-			}) // it - test 6
-		}) // when - 4
+				Eventually(func() bool {
+					if githubIssueToDelete.Status.State == "closed" {
+						return true
+					}
+					return false
+				}, timeout, interval).Should(BeTrue())
+			}) // it - test 10
+		}) // when - 6
 
 	}) //context
 
