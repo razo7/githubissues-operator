@@ -2,6 +2,36 @@
     // Use IntelliSense to learn about possible attributes.
     // Hover to view descriptions of existing attributes.
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    // "version": "0.2.0",
+    // "configurations": []
     "version": "0.2.0",
-    "configurations": []
+    "configurations": [
+        {
+            "name": "Reconcile",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "main.go",
+            "env": {
+                "WATCH_NAMESPACE": "githubissues-operator-system"
+            },
+            "args": []
+        },
+        {
+            "name": "Unit-Test",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "controllers/githubissue_controller_test.go",
+            "env": {
+                "WATCH_NAMESPACE": "githubissues-operator-system",
+                "KUBEBUILDER_ASSETS": "/home/oraz/.local/share/kubebuilder-envtest/k8s/1.20.2-linux-amd64"
+            },
+            "args": []
+        },
+        // manifests generate fmt vet envtest ## Run tests.
+        // KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
+
+        // https://auscunningham.medium.com/debug-kubernetes-operator-sdk-locally-using-vscode-a233aa7c750e#:~:text=you%20will%20need%20a%20launch%20json%20for%20vscode%20to%20interact%20with%20this%20headless%20mode%20of%20delve
+    ]
 }
