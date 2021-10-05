@@ -21,13 +21,11 @@ import (
 	"os"
 	"time"
 
-	// "github.com/google/go-cmp/cmp/internal/function"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	trainingv1alpha1 "github.com/razo7/githubissues-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-
-	trainingv1alpha1 "github.com/razo7/githubissues-operator/api/v1alpha1"
 )
 
 var _ = Describe("GithubIssue controller", func() {
@@ -49,6 +47,26 @@ var _ = Describe("GithubIssue controller", func() {
 		goodGithubIssueLookupKey types.NamespacedName
 		ctx                      context.Context
 	)
+	// goodGithubIssueLookupKey := types.NamespacedName{Name: GoodGithubIssueName, Namespace: GithubIssueNamespace}
+	// githubIssue := trainingv1alpha1.GithubIssue{
+	// 	TypeMeta: metav1.TypeMeta{
+	// 		APIVersion: "batch.tutorial.kubebuilder.io/v1",
+	// 		Kind:       "GithubIssue",
+	// 	},
+	// 	ObjectMeta: metav1.ObjectMeta{
+	// 		Name:      GoodGithubIssueName,
+	// 		Namespace: GithubIssueNamespace,
+	// 	},
+	// 	Spec: trainingv1alpha1.GithubIssueSpec{
+	// 		Repo:        "https://github.com/razo7/githubissues-operator",
+	// 		Title:       "K8s good Issue",
+	// 		Description: "Hi from testing K8s",
+	// 	},
+	// 	Status: trainingv1alpha1.GithubIssueStatus{
+	// 		State:               " ",
+	// 		LastUpdateTimestamp: " ",
+	// 	},
+	// } // githubIssue
 	Context("GithubIssue Four Unit Tests", func() {
 		ctx = context.Background()
 		BeforeEach(func() {
@@ -81,6 +99,7 @@ var _ = Describe("GithubIssue controller", func() {
 		}) // BeforeEach - 1
 
 		AfterEach(func() {
+			Expect(k8sClient).To(Not(BeNil()))
 			err := k8sClient.Delete(ctx, &githubIssue)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(func() error {
@@ -136,7 +155,7 @@ var _ = Describe("GithubIssue controller", func() {
 
 		}) // when - 1
 
-		When("we test updating an issue", func() {
+		FWhen("we test updating an issue", func() {
 
 			It("should set state to 'closed'", func() {
 				By("change Status.State")

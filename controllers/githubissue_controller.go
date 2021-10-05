@@ -128,11 +128,21 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		// The object is being deleted
 		if containsString(githubi.GetFinalizers(), myFinalizerName) { // https://book.kubebuilder.io/reference/using-finalizers.html
 			githubi.Status.State = "closed"
-			err := closeIssue(ownerRepo, githubi, token) // send an API call to change the state and closing time of the Github Issue
+			resp, err := closeIssue(ownerRepo, githubi, token) // send an API call to change the state and closing time of the Github Issue
 			if err != nil {
 				logger.Error(err, "Can't close the repo's issue- API problem")
 				return result, err
 			}
+			if resp.StatusCode != 201 { // https://docs.github.com/en/rest/reference/issues#create-an-issue
+				logger.Info("Not valid repo- change the state", "repo", ownerRepo)
+				githubi.Status.State = "Fail repo"
+				githubi.Status.LastUpdateTimestamp = time.Now().String()        // update LastUpdateTimestamp field
+				if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
+					logger.Error(err, "Can't update the K8s status state with the 'Fail repo' after CLOSE")
+					return result, err
+				}
+				return result, nil
+			} // if -status error
 
 			// remove our finalizer from the list and update it.
 			controllerutil.RemoveFinalizer(&githubi, myFinalizerName)
@@ -274,7 +284,7 @@ func postORpatchIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, t
 	return resp, body, err
 } // postORpatchIsuue
 
-func closeIssue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token string) error {
+func closeIssue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token string) (*http.Response, error) {
 	apiURL := "https://api.github.com/repos/" + ownerRepo + "/issues/" + strconv.Itoa(gituhubi.Status.Number)
 	issueData := GithubSend{State: "closed", ClosingTime: time.Now().Format("2006-01-02 15:04:05")} // formating time -> https://stackoverflow.com/questions/33119748/convert-time-time-to-string
 	//make it json
@@ -288,7 +298,7 @@ func closeIssue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token s
 	if resp.Body != nil {
 		defer resp.Body.Close()
 	}
-	return err
+	return resp, err
 } // closeIssue
 
 // SetupWithManager sets up the controller with the Manager.
@@ -297,17 +307,3 @@ func (r *GithubIssueReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&trainingv1alpha1.GithubIssue{}).
 		Complete(r)
 }
-
-// layout := "2006-01-02 15:04:05 +0300 IDT m=+5"
-// lastUpdateTime, err := time.Parse(layout, githubi.Status.LastUpdateTimestamp)
-// if err != nil {
-// 	logger.Error(err, "Can't parse the time")
-// 	return result, err
-// }
-// currTime := time.Now()
-// fmt.Println("Hi print 1")
-// fmt.Println("curr time = ", currTime, "\nlast time = ", githubi.Status.LastUpdateTimestamp, "\ndifference = ", currTime.Sub(lastUpdateTime))
-// fmt.Println("diff = ", currTime.Sub(lastUpdateTime), "\ndiff mili= ", currTime.Sub(lastUpdateTime).Milliseconds(), "\ndifference nano = ", currTime.Sub(lastUpdateTime).Nanoseconds())
-// if (currTime.Sub(lastUpdateTime)).Seconds() < 15500 { // don't update the description if it the last update was less than a second, otherwise it results in an endless loop
-// 	return result, nil
-// }
