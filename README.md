@@ -21,7 +21,7 @@ The mission is at [Google Doc](https://docs.google.com/document/d/1z1bqlnBL8GO1F
 
 ## Ongoing Work
 + Writing unit tests for the following cases (they should pass and cover):
-    + close issue on delete (check is good but somehow it don't delete the CR...)
+    + close issue on delete (check is good but somehow it doesn't delete the CR...)
 + Running Webhook cluster
 
 ## Future Work

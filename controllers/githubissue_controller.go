@@ -80,6 +80,9 @@ type GithubSend struct {
 //+kubebuilder:rbac:groups=training.githubissues,resources=githubissues,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=training.githubissues,resources=githubissues/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=training.githubissues,resources=githubissues/finalizers,verbs=update
+//+kubebuilder:rbac:groups=redhat.com,resources=githubissues/finalizers,verbs=get;create;update;patch;delete
+// For watching the resource and implementing finalizers ->
+//  https://developers.redhat.com/blog/2020/09/11/5-tips-for-developing-kubernetes-operators-with-the-new-operator-sdk#:~:text=adding%20rbac%20permissions%20with%20go
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
