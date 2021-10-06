@@ -103,7 +103,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return result, nil
 		}
 		if apierrors.IsNotFound(err) {
-			logger.Error(err, "Can't fetch Kubernetes github object", "object") //TODO: Do I reach to here?
+			logger.Error(err, "Can't fetch Kubernetes github object", "object")
 			return result, nil
 		}
 		return result, err
@@ -118,11 +118,14 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if githubi.Status.LastUpdateTimestamp == "" {
 		if !containsString(githubi.GetFinalizers(), myFinalizerName) {
 			controllerutil.AddFinalizer(&githubi, myFinalizerName) // registering our finalizer.
+			githubi.Status.LastUpdateTimestamp = time.Now().String()
 			if err := r.Update(ctx, &githubi); err != nil {
 				return result, err
 			}
+			return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 		}
-	}
+		// return ctrl.Result{RequeueAfter: 1 * time.Second}, nil // PROBLEM - resutls with an empty LastUpdateTimestamp string in the reconcile
+	} // if - register finalizer
 	// examine DeletionTimestamp to determine if object is under deletion
 	if !githubi.ObjectMeta.DeletionTimestamp.IsZero() {
 		// The object is being deleted
@@ -133,8 +136,8 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				logger.Error(err, "Can't close the repo's issue- API problem")
 				return result, err
 			}
-			if resp.StatusCode != 201 { // https://docs.github.com/en/rest/reference/issues#create-an-issue
-				logger.Info("Not valid repo- change the state", "repo", ownerRepo)
+			if resp.StatusCode != 200 { // https://docs.github.com/en/rest/reference/issues#create-an-issue
+				logger.Info("Not valid repo- can't close the repo", "repo", ownerRepo)
 				githubi.Status.State = "Fail repo"
 				githubi.Status.LastUpdateTimestamp = time.Now().String()        // update LastUpdateTimestamp field
 				if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
@@ -146,13 +149,14 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 			// remove our finalizer from the list and update it.
 			controllerutil.RemoveFinalizer(&githubi, myFinalizerName)
+			githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
 			if err := r.Update(ctx, &githubi); err != nil {
 				logger.Error(err, "Can't close the repo's issue - update problem")
 				return result, err
 			}
 		}
 		return result, nil // Stop reconciliation as the item is being deleted
-	}
+	} // if we need to delete
 
 	// If my K8s GithubIssue doesn't have an ID then create a new GithubIssue and update it's ID
 	// Otherwiese I have already created it earlier and it had an ID and I just update it's description
@@ -166,11 +170,11 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			resp, body, err := postORpatchIsuue(ownerRepo, githubi, token, true)
 			jsonBody = body
 			if err != nil {
-				logger.Error(err, "Can't create new repo's issue") //TODO: Do I reach to here 2?
+				logger.Error(err, "Can't create new repo's issue")
 				return result, err
 			}
 			if resp.StatusCode != 201 { // https://docs.github.com/en/rest/reference/issues#create-an-issue
-				logger.Info("Not valid repo- change the state", "repo", ownerRepo)
+				logger.Info("Not a valid repo- changing the state", "repo", ownerRepo)
 				githubi.Status.State = "Fail repo"
 				githubi.Status.LastUpdateTimestamp = time.Now().String()        // update LastUpdateTimestamp field
 				if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
@@ -191,23 +195,25 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				logger.Error(err, "Can't update the K8s github issue number from the issue in Github.com")
 				return result, err
 			}
+			return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 
 		} else { // update the description (if needed).
 			resp, body, err := postORpatchIsuue(ownerRepo, githubi, token, false)
 			if err != nil {
-				logger.Error(err, "Can't update the description in repo's issue") //TODO: Do I reach to here 3?
+				logger.Error(err, "Can't update the description in repo's issue")
 				return result, err
 			}
 			if resp.StatusCode != 200 {
 				logger.Info("Bad repo, there is no repo -", ownerRepo, " in github.com")
 				githubi.Status.State = "Fail repo"
+				githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
 				if err := r.Client.Status().Update(ctx, &githubi); err != nil {
 					logger.Error(err, "Can't update the K8s status state with the 'Fail repo' after PATCH")
 					return result, err
 				}
 			} // if -status error
 			jsonBody = body
-		}
+		} // else
 
 		if err := json.Unmarshal(jsonBody, &issue); err != nil {
 			logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error - after post/patch")
@@ -226,8 +232,6 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		logger.Info("End", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
 		return ctrl.Result{RequeueAfter: 60 * time.Second}, nil // tweak the resync period to every 1 minute.
 	} else {
-
-		// TODO: should I delete the resource?
 		// remove our finalizer from the list and update it.
 		controllerutil.RemoveFinalizer(&githubi, myFinalizerName)
 		if err := r.Update(ctx, &githubi); err != nil {

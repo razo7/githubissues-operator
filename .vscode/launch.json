@@ -2,6 +2,7 @@
     // Use IntelliSense to learn about possible attributes.
     // Hover to view descriptions of existing attributes.
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    // OR -> https://github.com/golang/vscode-go/blob/master/docs/debugging.md#features
     // "version": "0.2.0",
     // "configurations": []
     "version": "0.2.0",
@@ -23,6 +24,8 @@
             "request": "launch",
             "mode": "test",
             "program": "controllers/githubissue_controller_test.go",
+            // "showLog": true,
+            // "showGlobalVariables": true,
             "env": {
                 "WATCH_NAMESPACE": "githubissues-operator-system",
                 "KUBEBUILDER_ASSETS": "/home/oraz/.local/share/kubebuilder-envtest/k8s/1.20.2-linux-amd64"
