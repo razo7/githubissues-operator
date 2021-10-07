@@ -29,6 +29,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+func HttpHandler(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, httpCode int, expectedCode int, ownerRepo string, error string) trainingv1alpha1.GithubIssue {
+	if httpCode != expectedCode {
+		logger.Info(error, "repo", ownerRepo)
+		githubi.Status.State = Fail_Repo
+		githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
+	} // if -status error
+	return githubi
+}
+
 func DeleteCR(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, error) {
 	// The object is being deleted
 	var err error
@@ -39,12 +48,13 @@ func DeleteCR(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, ownerRep
 		if err != nil {
 			return githubi, err
 		}
-		if resp.StatusCode != Ok_Code {
-			logger.Info("Not valid repo- can't close the repo", "repo", ownerRepo)
-			githubi.Status.State = Fail_Repo
-			githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
+		githubi = HttpHandler(githubi, logger, resp.StatusCode, Ok_Code, ownerRepo, "Not valid repo- can't close the repo")
+		// if resp.StatusCode != Ok_Code {
+		// 	logger.Info("Not valid repo- can't close the repo", "repo", ownerRepo)
+		// 	githubi.Status.State = Fail_Repo
+		// 	githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
 
-		} // if -status error
+		// } // if -status error
 		if githubi.Status.State != Fail_Repo {
 			// remove our finalizer from the list and update it.
 			controllerutil.RemoveFinalizer(&githubi, FinalizerName)
@@ -100,18 +110,6 @@ func CloseIssue(ownerRepo string, issueNumber int, token string) (*http.Response
 	return resp, err
 } // closeIssue
 
-// func IsHttpError(httpCode int, expectedCode int, ownerRepo string, error string){
-// 				if httpCode != expectedCode {
-// 				logger.Info(error, "repo", ownerRepo)
-// 				githubi.Status.State = githubApi.Fail_Repo
-// 				githubi.Status.LastUpdateTimestamp = time.Now().String()        // update LastUpdateTimestamp field
-// 				if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
-// 					logger.Error(err, "Can't update the K8s status state with the 'Fail repo' after CLOSE")
-// 					return result, err
-// 				}
-// 				return result, nil
-// 			} // if -status error
-// }
 // Helper functions to check and remove string from a slice of string. From https://book.kubebuilder.io/reference/using-finalizers.html
 func ContainsString(slice []string, s string) bool {
 	for _, item := range slice {
