@@ -27,6 +27,8 @@ import (
 	"context"
 
 	trainingv1alpha1 "github.com/razo7/githubissues-operator/api/v1alpha1"
+	"github.com/razo7/githubissues-operator/github"
+	githubApi "github.com/razo7/githubissues-operator/github"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,16 +39,13 @@ import (
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
-	"bytes"
 	"encoding/json"
 
 	// metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"net/http"
 
 	// "fmt"
-	"io/ioutil"
+
 	"os"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -54,27 +53,9 @@ import (
 // GithubIssueReconciler reconciles a GithubIssue object
 type GithubIssueReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
-}
-
-// A GithubRecieve struct to map the entire Response
-type GithubRecieve struct {
-	Repo        string `json:"url"` // or `json:"html_url"`
-	Title       string `json:"title"`
-	Description string `json:"body"` // It is called 'body' in the json file
-	State       string `json:"state,omitempty"`
-	Number      int    `json:"number,omitempty"`
-}
-
-// GithubSend - specify data fields for new github issue submission
-type GithubSend struct {
-	Title       string `json:"title,omitempty"`
-	Body        string `json:"body,omitempty"`
-	State       string `json:"state,omitempty"`
-	ClosingTime string `json:"closed_at,omitempty"`
-	// Labels      string `json:"labels` /// TODO: add label functionality
-
+	Log          logr.Logger
+	Scheme       *runtime.Scheme
+	GithubClient github.Client
 }
 
 //+kubebuilder:rbac:groups=training.githubissues,resources=githubissues,verbs=get;list;watch;create;update;patch;delete
@@ -98,6 +79,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	logger := r.Log.WithValues("githubssue", req.NamespacedName)
 	githubi := trainingv1alpha1.GithubIssue{} // Empty GithubIssue
 	result := ctrl.Result{}                   // Empty Result
+	// gc githubApi.Client
 	if err := r.Get(ctx, req.NamespacedName, &githubi); err != nil {
 		if githubi.Status.Number == 0 { // if we can't fetch the issue after deleting it then stop it (we got here due to the last update)
 			return result, nil
@@ -116,7 +98,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// register finalizer once the CR enters the reconcile
 	myFinalizerName := "batch.tutorial.kubebuilder.io/finalizer"
 	if githubi.Status.LastUpdateTimestamp == "" {
-		if !containsString(githubi.GetFinalizers(), myFinalizerName) {
+		if !githubApi.ContainsString(githubi.GetFinalizers(), myFinalizerName) {
 			controllerutil.AddFinalizer(&githubi, myFinalizerName) // registering our finalizer.
 			githubi.Status.LastUpdateTimestamp = time.Now().String()
 			if err := r.Update(ctx, &githubi); err != nil {
@@ -124,21 +106,22 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			}
 			return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 		}
+
 		// return ctrl.Result{RequeueAfter: 1 * time.Second}, nil // PROBLEM - resutls with an empty LastUpdateTimestamp string in the reconcile
 	} // if - register finalizer
 	// examine DeletionTimestamp to determine if object is under deletion
 	if !githubi.ObjectMeta.DeletionTimestamp.IsZero() {
 		// The object is being deleted
-		if containsString(githubi.GetFinalizers(), myFinalizerName) { // https://book.kubebuilder.io/reference/using-finalizers.html
+		if githubApi.ContainsString(githubi.GetFinalizers(), myFinalizerName) { // https://book.kubebuilder.io/reference/using-finalizers.html
 			githubi.Status.State = "closed"
-			resp, err := closeIssue(ownerRepo, githubi, token) // send an API call to change the state and closing time of the Github Issue
+			resp, err := githubApi.CloseIssue(ownerRepo, githubi.Status.Number, token) // send an API call to change the state and closing time of the Github Issue
 			if err != nil {
 				logger.Error(err, "Can't close the repo's issue- API problem")
 				return result, err
 			}
-			if resp.StatusCode != 200 { // https://docs.github.com/en/rest/reference/issues#create-an-issue
+			if resp.StatusCode != githubApi.Ok_Code {
 				logger.Info("Not valid repo- can't close the repo", "repo", ownerRepo)
-				githubi.Status.State = "Fail repo"
+				githubi.Status.State = githubApi.Fail_Repo
 				githubi.Status.LastUpdateTimestamp = time.Now().String()        // update LastUpdateTimestamp field
 				if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
 					logger.Error(err, "Can't update the K8s status state with the 'Fail repo' after CLOSE")
@@ -161,21 +144,21 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// If my K8s GithubIssue doesn't have an ID then create a new GithubIssue and update it's ID
 	// Otherwiese I have already created it earlier and it had an ID and I just update it's description
 	logger.Info("Looking for K8s YAML ID", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
-	var issue GithubRecieve // Storing the github issue from Github website
-	var jsonBody []byte     // Storing the github issue from Github website in a JSON format
+	var issue githubApi.GithubRecieve // Storing the github issue from Github website
+	var jsonBody []byte               // Storing the github issue from Github website in a JSON format
 
-	if githubi.Status.State != "Fail repo" { // if the repo is valid
+	if githubi.Status.State != githubApi.Fail_Repo { // if the repo is valid
 
 		if githubi.Status.Number == 0 { // Zero = uninitialized field
-			resp, body, err := postORpatchIsuue(ownerRepo, githubi, token, true)
+			resp, body, err := githubApi.PostORpatchIsuue(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, githubi.Status.Number, token, true)
 			jsonBody = body
 			if err != nil {
 				logger.Error(err, "Can't create new repo's issue")
 				return result, err
 			}
-			if resp.StatusCode != 201 { // https://docs.github.com/en/rest/reference/issues#create-an-issue
+			if resp.StatusCode != githubApi.Created_Code { // https://docs.github.com/en/rest/reference/issues#create-an-issue
 				logger.Info("Not a valid repo- changing the state", "repo", ownerRepo)
-				githubi.Status.State = "Fail repo"
+				githubi.Status.State = githubApi.Fail_Repo
 				githubi.Status.LastUpdateTimestamp = time.Now().String()        // update LastUpdateTimestamp field
 				if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
 					logger.Error(err, "Can't update the K8s status state with the 'Fail repo' after POST")
@@ -198,14 +181,14 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 
 		} else { // update the description (if needed).
-			resp, body, err := postORpatchIsuue(ownerRepo, githubi, token, false)
+			resp, body, err := githubApi.PostORpatchIsuue(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, githubi.Status.Number, token, false)
 			if err != nil {
 				logger.Error(err, "Can't update the description in repo's issue")
 				return result, err
 			}
-			if resp.StatusCode != 200 {
+			if resp.StatusCode != githubApi.Ok_Code {
 				logger.Info("Bad repo, there is no repo -", ownerRepo, " in github.com")
-				githubi.Status.State = "Fail repo"
+				githubi.Status.State = githubApi.Fail_Repo
 				githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
 				if err := r.Client.Status().Update(ctx, &githubi); err != nil {
 					logger.Error(err, "Can't update the K8s status state with the 'Fail repo' after PATCH")
@@ -241,69 +224,6 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return result, nil
 	} // if -Fail repo
 } // Reconcile
-
-// Helper functions to check and remove string from a slice of string. From https://book.kubebuilder.io/reference/using-finalizers.html
-func containsString(slice []string, s string) bool {
-	for _, item := range slice {
-		if item == s {
-			return true
-		}
-	}
-	return false
-}
-
-func removeString(slice []string, s string) (result []string) {
-	for _, item := range slice {
-		if item == s {
-			continue
-		}
-		result = append(result, item)
-	}
-	return
-}
-
-// postORpatchIsuue make a REST API to Githun.com to post or patch based on isPost parameter
-func postORpatchIsuue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token string, isPost bool) (*http.Response, []byte, error) {
-	issueData := GithubSend{Title: gituhubi.Spec.Title, Body: gituhubi.Spec.Description}
-	//make it json
-	jsonData, _ := json.Marshal(issueData)
-	//creating client to set custom headers for Authorization
-	client := &http.Client{}
-	var apiURL string
-	var req *http.Request
-	if isPost {
-		apiURL = "https://api.github.com/repos/" + ownerRepo + "/issues"
-		req, _ = http.NewRequest("POST", apiURL, bytes.NewReader(jsonData))
-	} else {
-		apiURL = "https://api.github.com/repos/" + ownerRepo + "/issues/" + strconv.Itoa(gituhubi.Status.Number)
-		req, _ = http.NewRequest("PATCH", apiURL, bytes.NewReader(jsonData))
-	}
-	req.Header.Set("Authorization", "token "+token)
-	resp, err := client.Do(req)
-	if resp.Body != nil {
-		defer resp.Body.Close()
-	}
-	body, _ := ioutil.ReadAll(resp.Body)
-	// fmt.Println("fmt - Hello from postORpatchIsuue, isPost =", isPost, ", status = ", resp.StatusCode, ", http.StatusCreated = ", http.StatusCreated, " and err = ", err) // fmt option
-	return resp, body, err
-} // postORpatchIsuue
-
-func closeIssue(ownerRepo string, gituhubi trainingv1alpha1.GithubIssue, token string) (*http.Response, error) {
-	apiURL := "https://api.github.com/repos/" + ownerRepo + "/issues/" + strconv.Itoa(gituhubi.Status.Number)
-	issueData := GithubSend{State: "closed", ClosingTime: time.Now().Format("2006-01-02 15:04:05")} // formating time -> https://stackoverflow.com/questions/33119748/convert-time-time-to-string
-	//make it json
-	jsonData, _ := json.Marshal(issueData)
-	//creating client to set custom headers for Authorization
-	client := &http.Client{}
-	// fmt.Println("issueData ", issueData, ", jsonData", jsonData)
-	req, _ := http.NewRequest("PATCH", apiURL, bytes.NewReader(jsonData))
-	req.Header.Set("Authorization", "token "+token)
-	resp, err := client.Do(req)
-	if resp.Body != nil {
-		defer resp.Body.Close()
-	}
-	return resp, err
-} // closeIssue
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *GithubIssueReconciler) SetupWithManager(mgr ctrl.Manager) error {

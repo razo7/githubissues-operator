@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -25,6 +26,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	trainingv1alpha1 "github.com/razo7/githubissues-operator/api/v1alpha1"
+	githubApi "github.com/razo7/githubissues-operator/github"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -48,6 +50,7 @@ var _ = Describe("GithubIssue controller", func() {
 		goodGithubIssueLookupKey types.NamespacedName
 		ctx                      context.Context
 		i                        int
+		// gc                       githubApi.Client
 	)
 	Context("GithubIssue Four Unit Tests", func() {
 		i = 0
@@ -177,49 +180,45 @@ var _ = Describe("GithubIssue controller", func() {
 		// 	}) //it- test 4
 		// }) // when - 2
 
-		When("we test update Github.com - POST REST API", func() {
-			It("should succeed", func() {
-				Expect(k8sClient.Get(ctx, goodGithubIssueLookupKey, &githubIssue)).Should(Succeed())
-				resp, _, err := postORpatchIsuue(RepoName, githubIssue, token, true)
+		When("we test creating and deleting - REST API", func() {
+			It("Post and Close - should succeed", func() {
+				var issue githubApi.GithubRecieve // Storing the github issue from Github website
+				resp, body, err := githubApi.PostORpatchIsuue(RepoName, githubIssue.Spec.Title, githubIssue.Spec.Description, githubIssue.Status.Number, token, true)
+
 				Expect(err).To(BeNil())
 				Expect(resp.StatusCode).To(Equal(201))
-
-				// Expect(k8sClient.Delete(ctx, &githubIssue)).Should(Succeed())
-				// Eventually(func() error {
-				// 	return k8sClient.Get(ctx, goodGithubIssueLookupKey, &githubIssue)
-				// }, Timeout, Interval).ShouldNot(Succeed())
+				// Expect(json.Unmarshal(body, &issue).BeNil())
+				_ = json.Unmarshal(body, &issue)
+				githubIssue.Status.Number = issue.Number
+				resp, err = githubApi.CloseIssue(RepoName, githubIssue.Status.Number, token)
+				Expect(err).To(BeNil())
+				Expect(resp.StatusCode).To(Equal(200))
 			}) // it - test 5
+		})
+		When("we test update Github.com - Bad POST REST API", func() {
+
 			It("shouldn't succeed due to a bad repo", func() {
-				Expect(k8sClient.Get(ctx, goodGithubIssueLookupKey, &githubIssue)).Should(Succeed())
-				resp, _, err := postORpatchIsuue(RepoName+"1", githubIssue, token, true)
+				resp, _, err := githubApi.PostORpatchIsuue(RepoName+"1", githubIssue.Spec.Title, githubIssue.Spec.Description, githubIssue.Status.Number, token, true)
 				Expect(err).To(BeNil())
 				Expect(resp.StatusCode).To(Equal(404))
 			}) // it - test 6
 			It("shouldn't succeed due to a bad token", func() {
-				Expect(k8sClient.Get(ctx, goodGithubIssueLookupKey, &githubIssue)).Should(Succeed())
-				resp, _, err := postORpatchIsuue(RepoName, githubIssue, token+"something", true)
+
+				resp, _, err := githubApi.PostORpatchIsuue(RepoName, githubIssue.Spec.Title, githubIssue.Spec.Description, githubIssue.Status.Number, token+"something", true)
 				Expect(err).To(BeNil())
 				Expect(resp.StatusCode).To(Equal(401))
 			}) // it - test 7
 
 		}) // when -3
 
-		When("we test update Github.com - PATCH REST API", func() {
-			It("should succeed", func() {
-				Expect(k8sClient.Get(ctx, goodGithubIssueLookupKey, &githubIssue)).Should(Succeed())
-				resp, _, err := postORpatchIsuue(RepoName, githubIssue, token, false)
-				Expect(err).To(BeNil())
-				Expect(resp.StatusCode).To(Equal(200))
-			}) // it - test 8
+		When("we test update Github.com - Bad PATCH REST API", func() {
 			It("shouldn't succeed due to a bad repo", func() {
-				Expect(k8sClient.Get(ctx, goodGithubIssueLookupKey, &githubIssue)).Should(Succeed())
-				resp, _, err := postORpatchIsuue(RepoName+"1", githubIssue, token, false)
+				resp, _, err := githubApi.PostORpatchIsuue(RepoName+"1", githubIssue.Spec.Title, githubIssue.Spec.Description, githubIssue.Status.Number, token, false)
 				Expect(err).To(BeNil())
 				Expect(resp.StatusCode).To(Equal(404))
 			}) // it - test 9
 			It("shouldn't succeed due to a bad token", func() {
-				Expect(k8sClient.Get(ctx, goodGithubIssueLookupKey, &githubIssue)).Should(Succeed())
-				resp, _, err := postORpatchIsuue(RepoName, githubIssue, token+"something", false)
+				resp, _, err := githubApi.PostORpatchIsuue(RepoName, githubIssue.Spec.Title, githubIssue.Spec.Description, githubIssue.Status.Number, token+"something", false)
 				Expect(err).To(BeNil())
 				Expect(resp.StatusCode).To(Equal(401))
 			}) // it - test 10
