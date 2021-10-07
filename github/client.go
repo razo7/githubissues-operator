@@ -23,7 +23,39 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/go-logr/logr"
+	trainingv1alpha1 "github.com/razo7/githubissues-operator/api/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
+
+func DeleteCR(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, error) {
+	// The object is being deleted
+	var err error
+	if ContainsString(githubi.GetFinalizers(), FinalizerName) { // https://book.kubebuilder.io/reference/using-finalizers.html
+		githubi.Status.State = "closed"
+		resp, err := CloseIssue(ownerRepo, githubi.Status.Number, token) // send an API call to change the state and closing time of the Github Issue
+
+		if err != nil {
+			return githubi, err
+		}
+		if resp.StatusCode != Ok_Code {
+			logger.Info("Not valid repo- can't close the repo", "repo", ownerRepo)
+			githubi.Status.State = Fail_Repo
+			githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
+
+		} // if -status error
+		if githubi.Status.State != Fail_Repo {
+			// remove our finalizer from the list and update it.
+			controllerutil.RemoveFinalizer(&githubi, FinalizerName)
+			githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
+
+		}
+		logger.Info("Closing", "issue number", githubi.Status.Number)
+	}
+	return githubi, err
+	// return result, nil // Stop reconciliation as the item is being deleted
+}
 
 // postORpatchIsuue make a REST API to Githun.com to post or patch based on isPost parameter
 func PostORpatchIsuue(ownerRepo string, title string, description string, number int, token string, isPost bool) (*http.Response, []byte, error) {

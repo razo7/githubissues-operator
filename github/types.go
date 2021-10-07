@@ -19,9 +19,10 @@ package github
 import "net/http"
 
 const (
-	Fail_Repo    = "Fail repo"
-	Created_Code = 201 // https://docs.github.com/en/rest/reference/issues#create-an-issue
-	Ok_Code      = 200
+	Fail_Repo     = "Fail repo"
+	Created_Code  = 201 // https://docs.github.com/en/rest/reference/issues#create-an-issue
+	Ok_Code       = 200
+	FinalizerName = "batch.tutorial.kubebuilder.io/finalizer"
 )
 
 // A GithubRecieve struct to map the entire Response
