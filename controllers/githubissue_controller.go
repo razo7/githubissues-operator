@@ -79,6 +79,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	logger := r.Log.WithValues("githubssue", req.NamespacedName)
 	githubi := trainingv1alpha1.GithubIssue{} // Empty GithubIssue
 	result := ctrl.Result{}                   // Empty Result
+	firstRun := true
 	// gc githubApi.Client
 	if err := r.Get(ctx, req.NamespacedName, &githubi); err != nil {
 		if githubi.Status.Number == 0 { // if we can't fetch the issue after deleting it then stop it (we got here due to the last update)
@@ -90,7 +91,9 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		return result, err
 	}
-
+	if githubi.Status.Number > 0 {
+		firstRun = false
+	}
 	ownerRepo := strings.Split(githubi.Spec.Repo, "github.com/")[1] // extract the repo's username, and repo's name from the repo's url
 	// Good link for using secrets -> https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables
 	token := os.Getenv("GIT_TOKEN_GI") // store the github token you use in a secret and use it in the code by reading an env variable
@@ -101,10 +104,10 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if !githubApi.ContainsString(githubi.GetFinalizers(), myFinalizerName) {
 			controllerutil.AddFinalizer(&githubi, myFinalizerName) // registering our finalizer.
 			githubi.Status.LastUpdateTimestamp = time.Now().String()
-			if err := r.Update(ctx, &githubi); err != nil {
-				return result, err
-			}
-			return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+			// if err := r.Update(ctx, &githubi); err != nil {
+			// 	return result, err
+			// }
+			// return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 		}
 
 		// return ctrl.Result{RequeueAfter: 1 * time.Second}, nil // PROBLEM - resutls with an empty LastUpdateTimestamp string in the reconcile
@@ -115,6 +118,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if githubApi.ContainsString(githubi.GetFinalizers(), myFinalizerName) { // https://book.kubebuilder.io/reference/using-finalizers.html
 			githubi.Status.State = "closed"
 			resp, err := githubApi.CloseIssue(ownerRepo, githubi.Status.Number, token) // send an API call to change the state and closing time of the Github Issue
+
 			if err != nil {
 				logger.Error(err, "Can't close the repo's issue- API problem")
 				return result, err
@@ -122,28 +126,30 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			if resp.StatusCode != githubApi.Ok_Code {
 				logger.Info("Not valid repo- can't close the repo", "repo", ownerRepo)
 				githubi.Status.State = githubApi.Fail_Repo
-				githubi.Status.LastUpdateTimestamp = time.Now().String()        // update LastUpdateTimestamp field
-				if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
-					logger.Error(err, "Can't update the K8s status state with the 'Fail repo' after CLOSE")
-					return result, err
-				}
-				return result, nil
+				githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
+				// if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
+				// 	logger.Error(err, "Can't update the K8s status state with the 'Fail repo' after CLOSE")
+				// 	return result, err
+				// }
+				// return result, nil
 			} // if -status error
-
-			// remove our finalizer from the list and update it.
-			controllerutil.RemoveFinalizer(&githubi, myFinalizerName)
-			githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
-			if err := r.Update(ctx, &githubi); err != nil {
-				logger.Error(err, "Can't close the repo's issue - update problem")
-				return result, err
+			if githubi.Status.State != githubApi.Fail_Repo {
+				// remove our finalizer from the list and update it.
+				controllerutil.RemoveFinalizer(&githubi, myFinalizerName)
+				githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
+				// if err := r.Update(ctx, &githubi); err != nil {
+				// 	logger.Error(err, "Can't close the repo's issue - update problem")
+				// 	return result, err
+				// }
 			}
+			logger.Info("Closing", "issue number", githubi.Status.Number)
 		}
-		return result, nil // Stop reconciliation as the item is being deleted
+		// return result, nil // Stop reconciliation as the item is being deleted
 	} // if we need to delete
 
 	// If my K8s GithubIssue doesn't have an ID then create a new GithubIssue and update it's ID
 	// Otherwiese I have already created it earlier and it had an ID and I just update it's description
-	logger.Info("Looking for K8s YAML ID", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
+	logger.Info("After fetching K8s", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
 	var issue githubApi.GithubRecieve // Storing the github issue from Github website
 	var jsonBody []byte               // Storing the github issue from Github website in a JSON format
 
@@ -159,27 +165,29 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			if resp.StatusCode != githubApi.Created_Code { // https://docs.github.com/en/rest/reference/issues#create-an-issue
 				logger.Info("Not a valid repo- changing the state", "repo", ownerRepo)
 				githubi.Status.State = githubApi.Fail_Repo
-				githubi.Status.LastUpdateTimestamp = time.Now().String()        // update LastUpdateTimestamp field
-				if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
-					logger.Error(err, "Can't update the K8s status state with the 'Fail repo' after POST")
+				githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
+				// if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
+				// 	logger.Error(err, "Can't update the K8s status state with the 'Fail repo' after POST")
+				// 	return result, err
+				// }
+				// return result, nil
+			} // if -status error
+			if githubi.Status.State != githubApi.Fail_Repo { // if the repo is valid
+				if err := json.Unmarshal(jsonBody, &issue); err != nil {
+					logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error - after post")
 					return result, err
 				}
-				return result, nil
-			} // if -status error
-			if err := json.Unmarshal(jsonBody, &issue); err != nil {
-				logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error - after post")
-				return result, err
-			}
 
-			githubi.Status.Number = issue.Number                     // set the new issue number
-			githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
-			logger.Info("Get K8s YAML ID", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
-			if err := r.Client.Status().Update(ctx, &githubi); err != nil {
-				logger.Error(err, "Can't update the K8s github issue number from the issue in Github.com")
-				return result, err
+				githubi.Status.Number = issue.Number // set the new issue number
+				githubi.Status.State = issue.State
+				githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
+				logger.Info("Get K8s YAML ID", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
+				// if err := r.Client.Status().Update(ctx, &githubi); err != nil {
+				// 	logger.Error(err, "Can't update the K8s github issue number from the issue in Github.com")
+				// 	return result, err
+				// }
+				// return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 			}
-			return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
-
 		} else { // update the description (if needed).
 			resp, body, err := githubApi.PostORpatchIsuue(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, githubi.Status.Number, token, false)
 			if err != nil {
@@ -190,39 +198,55 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				logger.Info("Bad repo, there is no repo -", ownerRepo, " in github.com")
 				githubi.Status.State = githubApi.Fail_Repo
 				githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
-				if err := r.Client.Status().Update(ctx, &githubi); err != nil {
-					logger.Error(err, "Can't update the K8s status state with the 'Fail repo' after PATCH")
-					return result, err
-				}
+				// if err := r.Client.Status().Update(ctx, &githubi); err != nil {
+				// 	logger.Error(err, "Can't update the K8s status state with the 'Fail repo' after PATCH")
+				// 	return result, err
+				// }
 			} // if -status error
 			jsonBody = body
 		} // else
+		if githubi.Status.State != githubApi.Fail_Repo { // if the repo is valid
 
-		if err := json.Unmarshal(jsonBody, &issue); err != nil {
-			logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error - after post/patch")
-			return result, err
-		}
-		if githubi.Spec.Description != issue.Description { // Is there a change in the description?
-			githubi.Spec.Description = issue.Description
-			githubi.Status.State = issue.State
-			githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
-			if err := r.Client.Status().Update(ctx, &githubi); err != nil {
-				logger.Error(err, "Can't update the K8s status state with the real github issue, maybe because the github issue has already been closed")
+			if err := json.Unmarshal(jsonBody, &issue); err != nil {
+				logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error - after post/patch")
 				return result, err
 			}
+			if githubi.Spec.Description != issue.Description { // Is there a change in the description?
+				githubi.Spec.Description = issue.Description
+				githubi.Status.State = issue.State
+				githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
+				// if err := r.Client.Status().Update(ctx, &githubi); err != nil {
+				// 	logger.Error(err, "Can't update the K8s status state with the real github issue, maybe because the github issue has already been closed")
+				// 	return result, err
+				// }
+			}
 		}
-
-		logger.Info("End", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
-		return ctrl.Result{RequeueAfter: 60 * time.Second}, nil // tweak the resync period to every 1 minute.
+		// logger.Info("End", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
+		// return ctrl.Result{RequeueAfter: 60 * time.Second}, nil // tweak the resync period to every 1 minute.
 	} else {
 		// remove our finalizer from the list and update it.
 		controllerutil.RemoveFinalizer(&githubi, myFinalizerName)
-		if err := r.Update(ctx, &githubi); err != nil {
-			logger.Error(err, "Can't close the repo's issue - update problem")
+		// if err := r.Update(ctx, &githubi); err != nil {
+		// 	logger.Error(err, "Can't close the repo's issue - update problem")
+		// 	return result, err
+		// }
+		// return result, nil
+	} // if -Fail repo
+	if githubi.Status.State == "open" {
+		if err := r.Client.Status().Update(ctx, &githubi); err != nil {
+			logger.Error(err, "Can't status")
 			return result, err
 		}
-		return result, nil
-	} // if -Fail repo
+	}
+	if firstRun || githubi.Status.State == "closed" {
+		if err := r.Update(ctx, &githubi); err != nil {
+			logger.Error(err, "Can't update the K8s status state with the real github issue, maybe because the github issue has already been closed")
+			return result, err
+		}
+	}
+
+	logger.Info("End", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
+	return ctrl.Result{RequeueAfter: 60 * time.Second}, nil // tweak the resync period to every 1 minute.
 } // Reconcile
 
 // SetupWithManager sets up the controller with the Manager.

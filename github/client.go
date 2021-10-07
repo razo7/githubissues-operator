@@ -68,6 +68,18 @@ func CloseIssue(ownerRepo string, issueNumber int, token string) (*http.Response
 	return resp, err
 } // closeIssue
 
+// func IsHttpError(httpCode int, expectedCode int, ownerRepo string, error string){
+// 				if httpCode != expectedCode {
+// 				logger.Info(error, "repo", ownerRepo)
+// 				githubi.Status.State = githubApi.Fail_Repo
+// 				githubi.Status.LastUpdateTimestamp = time.Now().String()        // update LastUpdateTimestamp field
+// 				if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
+// 					logger.Error(err, "Can't update the K8s status state with the 'Fail repo' after CLOSE")
+// 					return result, err
+// 				}
+// 				return result, nil
+// 			} // if -status error
+// }
 // Helper functions to check and remove string from a slice of string. From https://book.kubebuilder.io/reference/using-finalizers.html
 func ContainsString(slice []string, s string) bool {
 	for _, item := range slice {

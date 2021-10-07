@@ -107,44 +107,43 @@ var _ = Describe("GithubIssue controller", func() {
 				Expect(k8sClient.Get(ctx, goodGithubIssueLookupKey, &githubIssue)).Should(Succeed())
 			}) //it - test 1
 
-			It("should fail due to a bad repo ", func() {
-				By("use a bad repo")
-				badGithubIssueLookupKey := types.NamespacedName{Name: BadGithubIssueName, Namespace: GithubIssueNamespace}
-				badgithubIssue := trainingv1alpha1.GithubIssue{
-					TypeMeta: metav1.TypeMeta{
-						APIVersion: "batch.tutorial.kubebuilder.io/v1",
-						Kind:       "GithubIssue",
-					},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      BadGithubIssueName,
-						Namespace: GithubIssueNamespace,
-					},
-					Spec: trainingv1alpha1.GithubIssueSpec{
-						Repo:        RepoURL + "2",
-						Title:       "K8s badIssue",
-						Description: "Not a good issue ",
-					},
-					Status: trainingv1alpha1.GithubIssueStatus{
-						State:               " ",
-						LastUpdateTimestamp: " ",
-					},
-				} // badgithubIssue
-				Expect(k8sClient).To(Not(BeNil()))
-				err := k8sClient.Create(ctx, &badgithubIssue)
-				Expect(err).NotTo(HaveOccurred())
-				Eventually(func() error {
-					return k8sClient.Get(ctx, badGithubIssueLookupKey, &badgithubIssue)
-				}, Timeout, Interval).Should(Succeed())
+			// It("should fail due to a bad repo ", func() {
+			// 	By("use a bad repo")
+			// 	badGithubIssueLookupKey := types.NamespacedName{Name: BadGithubIssueName, Namespace: GithubIssueNamespace}
+			// 	badgithubIssue := trainingv1alpha1.GithubIssue{
+			// 		TypeMeta: metav1.TypeMeta{
+			// 			APIVersion: "batch.tutorial.kubebuilder.io/v1",
+			// 			Kind:       "GithubIssue",
+			// 		},
+			// 		ObjectMeta: metav1.ObjectMeta{
+			// 			Name:      BadGithubIssueName,
+			// 			Namespace: GithubIssueNamespace,
+			// 		},
+			// 		Spec: trainingv1alpha1.GithubIssueSpec{
+			// 			Repo:        RepoURL + "2",
+			// 			Title:       "K8s badIssue",
+			// 			Description: "Not a good issue ",
+			// 		},
+			// 		Status: trainingv1alpha1.GithubIssueStatus{
+			// 			State:               " ",
+			// 			LastUpdateTimestamp: " ",
+			// 		},
+			// 	} // badgithubIssue
+			// 	Expect(k8sClient).To(Not(BeNil()))
+			// 	err := k8sClient.Create(ctx, &badgithubIssue)
+			// 	Expect(err).NotTo(HaveOccurred())
+			// 	Eventually(func() error {
+			// 		return k8sClient.Get(ctx, badGithubIssueLookupKey, &badgithubIssue)
+			// 	}, Timeout, Interval).Should(Succeed())
 
-				Eventually(func() bool {
-					Expect(k8sClient.Get(ctx, badGithubIssueLookupKey, &badgithubIssue)).Should(Succeed())
-					if badgithubIssue.Status.State != "Fail repo" {
-						return false
-					}
-					return true
-				}, Timeout, Interval).Should(BeTrue())
+			// 	Eventually(func() bool {
+			// 		if badgithubIssue.Status.State != githubApi.Fail_Repo {
+			// 			return false
+			// 		}
+			// 		return true
+			// 	}, Timeout, Interval).Should(BeTrue())
 
-			}) // It - 2
+			// }) // It - 2
 
 		}) // when - 1
 
