@@ -39,8 +39,6 @@ type GithubIssueSpec struct {
 	Title string `json:"title"`
 	// The issue's description
 	Description string `json:"description"`
-	// The issue's labels which are associated - array of strings or array of objects
-	Labels string `json:"labels,omitempty"`
 }
 
 // GithubIssueStatus defines the observed state of GithubIssue

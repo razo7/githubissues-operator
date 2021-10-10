@@ -39,10 +39,6 @@ spec:
               description:
                 description: The issue's description
                 type: string
-              labels:
-                description: The issue's labels which are associated - array of strings
-                  or array of objects
-                type: string
               repo:
                 description: Represent the github repo's URL - e.g https://github.com/rgolangh/dotfiles
                 pattern: ^https?:\/\/github.com+/[a-zA-Z0-9\_.-]+/[a-zA-Z0-9\_.-]
