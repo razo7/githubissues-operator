@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+// HttpHandler check for a mismatch between httpCode and the expected code, and update the Stautis accordingly
 func HttpHandler(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, httpCode int, expectedCode int, ownerRepo string, error string) trainingv1alpha1.GithubIssue {
 	if httpCode != expectedCode {
 		logger.Info(error, "repo", ownerRepo)
@@ -38,8 +39,8 @@ func HttpHandler(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, httpC
 	return githubi
 }
 
-func DeleteCR(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, error) {
-	// The object is being deleted
+// DeleteCR check if FinalizerName has been registered, make an REST API call to close the Issue, check http response and eventually unregister FinalizerName
+func DeleteIssue(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, error) {
 	var err error
 	if ContainsString(githubi.GetFinalizers(), FinalizerName) { // https://book.kubebuilder.io/reference/using-finalizers.html
 		githubi.Status.State = "closed"
@@ -49,22 +50,59 @@ func DeleteCR(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, ownerRep
 			return githubi, err
 		}
 		githubi = HttpHandler(githubi, logger, resp.StatusCode, Ok_Code, ownerRepo, "Not valid repo- can't close the repo")
-		// if resp.StatusCode != Ok_Code {
-		// 	logger.Info("Not valid repo- can't close the repo", "repo", ownerRepo)
-		// 	githubi.Status.State = Fail_Repo
-		// 	githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
-
-		// } // if -status error
 		if githubi.Status.State != Fail_Repo {
 			// remove our finalizer from the list and update it.
 			controllerutil.RemoveFinalizer(&githubi, FinalizerName)
 			githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
 
 		}
-		logger.Info("Closing", "issue number", githubi.Status.Number)
 	}
 	return githubi, err
 	// return result, nil // Stop reconciliation as the item is being deleted
+}
+
+//
+func CreateIssue(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, []byte, error, byte) {
+	resp, body, err := PostORpatchIsuue(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, githubi.Status.Number, token, true)
+	var errNum byte
+	if err != nil {
+		errNum = 'a'
+		// logger.Error(err, "Can't create new repo's issue")
+		return githubi, body, err, errNum
+	}
+	// if resp.StatusCode != Created_Code { // https://docs.github.com/en/rest/reference/issues#create-an-issue
+	// 	logger.Info("Not a valid repo- changing the state", "repo", ownerRepo)
+	// 	githubi.Status.State = Fail_Repo
+	// 	githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
+	// } // if -status error
+	githubi = HttpHandler(githubi, logger, resp.StatusCode, Created_Code, ownerRepo, "Not a valid repo- changing the state")
+	if githubi.Status.State != Fail_Repo { // if the repo is valid
+		if err := json.Unmarshal(body, &issue); err != nil {
+			errNum = 'b'
+			// logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error - after post")
+			return githubi, body, err, errNum
+		}
+
+		githubi.Status.Number = issue.Number // set the new issue number
+		githubi.Status.State = issue.State
+		githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
+	}
+	return githubi, body, err, errNum
+}
+
+func UpdateIssue(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, []byte, error) {
+	resp, body, err := PostORpatchIsuue(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, githubi.Status.Number, token, false)
+	if err != nil {
+		// logger.Error(err, "Can't update the description in repo's issue")
+		return githubi, body, err
+	}
+	githubi = HttpHandler(githubi, logger, resp.StatusCode, Ok_Code, ownerRepo, "Bad repo, there is no repo -")
+	// if resp.StatusCode != githubApi.Ok_Code {
+	// 	logger.Info("Bad repo, there is no repo -", ownerRepo, " in github.com")
+	// 	githubi.Status.State = githubApi.Fail_Repo
+	// 	githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
+	// } // if -status error
+	return githubi, body, err
 }
 
 // postORpatchIsuue make a REST API to Githun.com to post or patch based on isPost parameter

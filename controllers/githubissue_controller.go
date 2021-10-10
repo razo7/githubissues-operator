@@ -44,7 +44,6 @@ import (
 	// metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	// "fmt"
-
 	"os"
 	"strings"
 	"time"
@@ -100,65 +99,51 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	token := os.Getenv("GIT_TOKEN_GI") // store the github token you use in a secret and use it in the code by reading an env variable
 
 	// register finalizer once the CR has been created
-
 	if githubi.Status.LastUpdateTimestamp == "" {
 		if !githubApi.ContainsString(githubi.GetFinalizers(), githubApi.FinalizerName) {
 			controllerutil.AddFinalizer(&githubi, githubApi.FinalizerName) // registering our finalizer.
 			githubi.Status.LastUpdateTimestamp = time.Now().String()
 		}
 	} // if - register finalizer
+
 	// examine DeletionTimestamp to determine if object is under deletion
 	if !githubi.ObjectMeta.DeletionTimestamp.IsZero() {
 		// The object is being deleted
-		if githubi, err = githubApi.DeleteCR(githubi, logger, ownerRepo, token); err != nil {
+		if githubi, err = githubApi.DeleteIssue(githubi, logger, ownerRepo, token); err != nil {
 			logger.Error(err, "Can't close the repo's issue- API problem")
 			return result, err
 		}
-	} // if we need to delete
+		logger.Info("Closing", "issue number", githubi.Status.Number)
+	} // if we need to delete the issue
 
 	// If my K8s GithubIssue doesn't have an ID then create a new GithubIssue and update it's ID
 	// Otherwiese I have already created it earlier and it had an ID and I just update it's description
 	logger.Info("After fetching K8s", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
 	var issue githubApi.GithubRecieve // Storing the github issue from Github website
 	var jsonBody []byte               // Storing the github issue from Github website in a JSON format
+	var errNum byte
 
 	if githubi.Status.State != githubApi.Fail_Repo { // if the repo is valid
 
 		if githubi.Status.Number == 0 { // Zero = uninitialized field
-			resp, body, err := githubApi.PostORpatchIsuue(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, githubi.Status.Number, token, true)
-			jsonBody = body
-			if err != nil {
-				logger.Error(err, "Can't create new repo's issue")
+			if githubi, jsonBody, err, errNum = githubApi.CreateIssue(githubi, logger, ownerRepo, token); err != nil {
+				switch errNum {
+				case 'a':
+					logger.Error(err, "Can't create new repo's issue")
+				case 'b':
+					logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error - after post")
+				} // switch
 				return result, err
 			}
-			if resp.StatusCode != githubApi.Created_Code { // https://docs.github.com/en/rest/reference/issues#create-an-issue
-				logger.Info("Not a valid repo- changing the state", "repo", ownerRepo)
-				githubi.Status.State = githubApi.Fail_Repo
-				githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
-			} // if -status error
-			if githubi.Status.State != githubApi.Fail_Repo { // if the repo is valid
-				if err := json.Unmarshal(jsonBody, &issue); err != nil {
-					logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error - after post")
-					return result, err
-				}
+			logger.Info("After posting a GithubIssue", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
 
-				githubi.Status.Number = issue.Number // set the new issue number
-				githubi.Status.State = issue.State
-				githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
-				logger.Info("Get K8s YAML ID", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
-			}
 		} else { // update the description (if needed).
-			resp, body, err := githubApi.PostORpatchIsuue(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, githubi.Status.Number, token, false)
-			if err != nil {
+			if githubi, jsonBody, err = githubApi.UpdateIssue(githubi, logger, ownerRepo, token); err != nil {
 				logger.Error(err, "Can't update the description in repo's issue")
 				return result, err
 			}
-			if resp.StatusCode != githubApi.Ok_Code {
-				logger.Info("Bad repo, there is no repo -", ownerRepo, " in github.com")
-				githubi.Status.State = githubApi.Fail_Repo
-				githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
-			} // if -status error
-			jsonBody = body
+			logger.Info("After updating a GithubIssue", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
+
 		} // else
 		if githubi.Status.State != githubApi.Fail_Repo { // if the repo is valid
 
@@ -177,6 +162,8 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		controllerutil.RemoveFinalizer(&githubi, githubApi.FinalizerName)
 		// return result, nil
 	} // if -Fail repo
+
+	// Update the client status or the whole client (for register/unregister finalizer)
 	if githubi.Status.State == "open" {
 		if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
 			logger.Error(err, "Can't status")
