@@ -26,6 +26,10 @@ const (
 	Created_Code  = 201 // https://docs.github.com/en/rest/reference/issues#create-an-issue
 	Ok_Code       = 200
 	FinalizerName = "batch.tutorial.kubebuilder.io/finalizer"
+
+	REST_ERROR  = "REST API error"
+	TOKEN_ERROR = "Repo or Token error"
+	JSON_ERROR  = "Parsing error"
 )
 
 var (
@@ -52,12 +56,13 @@ type GithubSend struct {
 }
 
 type Client interface {
-	HttpHandler(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, httpCode int, expectedCode int, ownerRepo string, error string) trainingv1alpha1.GithubIssue
 	DeleteIssue(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, error)
 	CreateIssue(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, []byte, error, byte)
 	UpdateIssue(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, []byte, error)
 
-	// ContainsString(slice []string, s string) bool
 	// PostORpatchIsuue(ownerRepo string, title string, description string, number int, token string, isPost bool) (*http.Response, []byte, error)
 	// CloseIssue(ownerRepo string, issueNumber int, token string) (*http.Response, error)
+
+	// HttpHandler(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, httpCode int, expectedCode int, ownerRepo string) (trainingv1alpha1.GithubIssue, error)
+	// ContainsString(slice []string, s string) bool
 }

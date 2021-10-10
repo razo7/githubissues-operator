@@ -80,7 +80,8 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	result := ctrl.Result{}                   // Empty Result
 	firstRun := true
 	var err error
-	// gc githubApi.Client
+	var errType string // Storing the type of the error
+
 	if err := r.Get(ctx, req.NamespacedName, &githubi); err != nil {
 		if githubi.Status.Number == 0 { // if we can't fetch the issue after deleting it then stop it (we got here due to the last update)
 			return result, nil
@@ -97,7 +98,6 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	ownerRepo := strings.Split(githubi.Spec.Repo, "github.com/")[1] // extract the repo's username, and repo's name from the repo's url
 	// Good link for using secrets -> https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables
 	token := os.Getenv("GIT_TOKEN_GI") // store the github token you use in a secret and use it in the code by reading an env variable
-
 	// register finalizer once the CR has been created
 	if githubi.Status.LastUpdateTimestamp == "" {
 		if !githubApi.ContainsString(githubi.GetFinalizers(), githubApi.FinalizerName) {
@@ -109,8 +109,14 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// examine DeletionTimestamp to determine if object is under deletion
 	if !githubi.ObjectMeta.DeletionTimestamp.IsZero() {
 		// The object is being deleted
-		if githubi, err = githubApi.DeleteIssue(githubi, logger, ownerRepo, token); err != nil {
-			logger.Error(err, "Can't close the repo's issue- API problem")
+		if githubi, err, errType = githubApi.DeleteIssue(githubi, logger, ownerRepo, token); err != nil {
+			switch errType {
+			case "REST":
+				logger.Error(err, githubApi.REST_ERROR+"Can't close the repo's issue")
+				// panic(err)
+			case "TOKEN":
+				logger.Error(err, githubApi.TOKEN_ERROR)
+			} // switch
 			return result, err
 		}
 		logger.Info("Closing", "issue number", githubi.Status.Number)
@@ -119,60 +125,67 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// If my K8s GithubIssue doesn't have an ID then create a new GithubIssue and update it's ID
 	// Otherwiese I have already created it earlier and it had an ID and I just update it's description
 	logger.Info("After fetching K8s", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
-	var issue githubApi.GithubRecieve // Storing the github issue from Github website
-	var jsonBody []byte               // Storing the github issue from Github website in a JSON format
-	var errNum byte
+	var issue githubApi.GithubRecieve // storing the github issue from Github website
+	var jsonBody []byte               // storing the github issue from Github website in a JSON format
 
 	if githubi.Status.State != githubApi.Fail_Repo { // if the repo is valid
 
 		if githubi.Status.Number == 0 { // Zero = uninitialized field
-			if githubi, jsonBody, err, errNum = githubApi.CreateIssue(githubi, logger, ownerRepo, token); err != nil {
-				switch errNum {
-				case 'a':
-					logger.Error(err, "Can't create new repo's issue")
-				case 'b':
-					logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error - after post")
+			if githubi, jsonBody, err, errType = githubApi.CreateIssue(githubi, logger, ownerRepo, token); err != nil {
+				switch errType {
+				case "REST":
+					logger.Error(err, githubApi.REST_ERROR)
+				case "TOKEN":
+					logger.Error(err, githubApi.TOKEN_ERROR)
+					// panic(err)
+				case "JSON":
+					logger.Error(err, githubApi.JSON_ERROR)
 				} // switch
 				return result, err
-			}
+			} // CreateIssue
 			logger.Info("After posting a GithubIssue", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
 
-		} else { // update the description (if needed).
-			if githubi, jsonBody, err = githubApi.UpdateIssue(githubi, logger, ownerRepo, token); err != nil {
-				logger.Error(err, "Can't update the description in repo's issue")
+		} else {
+			if githubi, jsonBody, err, errType = githubApi.UpdateIssue(githubi, logger, ownerRepo, token); err != nil {
+				switch errType {
+				case "REST":
+					logger.Error(err, githubApi.REST_ERROR)
+				case "TOKEN":
+					logger.Error(err, githubApi.TOKEN_ERROR)
+					// panic(err)
+				} // switch
 				return result, err
 			}
 			logger.Info("After updating a GithubIssue", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
 
 		} // else
-		if githubi.Status.State != githubApi.Fail_Repo { // if the repo is valid
+		// if githubi.Status.State != githubApi.Fail_Repo { // if the repo is valid
 
-			if err := json.Unmarshal(jsonBody, &issue); err != nil {
-				logger.Error(err, "Can't parse the githubIssue - json.Unmarshal error - after post/patch")
-				return result, err
-			}
-			if githubi.Spec.Description != issue.Description { // Is there a change in the description?
-				githubi.Spec.Description = issue.Description
-				githubi.Status.State = issue.State
-				githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
-			}
+		if err := json.Unmarshal(jsonBody, &issue); err != nil {
+			logger.Error(err, "Parsing error")
+			return result, err
 		}
+		if githubi.Spec.Description != issue.Description { // update the description (if needed).
+			githubi.Spec.Description = issue.Description
+			githubi.Status.State = issue.State
+			githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
+		}
+		//}
 	} else {
 		// remove our finalizer from the list and update it.
 		controllerutil.RemoveFinalizer(&githubi, githubApi.FinalizerName)
-		// return result, nil
-	} // if -Fail repo
+	}
 
 	// Update the client status or the whole client (for register/unregister finalizer)
 	if githubi.Status.State == "open" {
 		if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
-			logger.Error(err, "Can't status")
+			logger.Error(err, "Can't update Client's status")
 			return result, err
 		}
 	}
 	if firstRun || githubi.Status.State == "closed" {
 		if err := r.Update(ctx, &githubi); err != nil {
-			logger.Error(err, "Can't update the K8s status state with the real github issue, maybe because the github issue has already been closed")
+			logger.Error(err, "Can't update reconciler - for register/unregister finalizer")
 			return result, err
 		}
 	}

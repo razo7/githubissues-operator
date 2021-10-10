@@ -1,18 +1,20 @@
 # githubissues-operator
-An exercise of creating an operator 'githubissues-operator'.
-The mission is at [Google Doc](https://docs.google.com/document/d/1z1bqlnBL8GO1FecJ0B2djncFzNPukOL1jw0E5K1xpgI/) and it suggest to use [GO's Operator SDK](https://sdk.operatorframework.io/docs/building-operators/golang/tutorial/) to create the operator.
+An operator which creats, updates and deletes Github issues using [GO's Operator SDK](https://sdk.operatorframework.io/docs/building-operators/golang/tutorial/).
+The reconcile loop uses REST API calls for updating Github.com issues. 
 
-## Finished Work
-+ Initalize an Operator with the desired Spec and Status (and some optional fields). Can be seen at 'api/v1alpha1/githubissue_types.go'.
+## Features
++ The Operator's Spec and Status are (api/v1alpha1/githubissue_types.go):
     + Spec includes 'Repo', 'Title', 'Description', and 'Lables' fields.
     + Status includes 'State', 'LastUpdateTimestamp', and 'Number' fields.
-+ Reconcile loop (controllers/githubissue_controller.go)
-    + fetch K8 object
-    + repo's basic validation (probably no needed as the check is suposed to be in CRD level)
-    + gathering Github token from environment variable (by a secret)
-    + checking if this issue is new, is the Number field zero?, if so then create an API call to create it with the basic parameters it has and set it's Number for next time (by changing the Status). If this is an old issue, Number field is greater than zero, then create an API call to update it with the basic parameters.
-    + update the K8s object Status.State with Status.State from the Github.com issue and reconcile again after a minute.
 + CRD validation of the Spec.Repo field by cheking it's pattern with kubebuilder.
++ The reconcile loop (controllers/githubissue_controller.go):
+    + fetch K8 object
+    + gathers Github token from environment variable (by a secret)
+    + register finalizer
+    + delete the CR if it is needed
+    + create CR if that's the first run of reconcile, otherwise only updates it
+    + at the end update status of K8s object or the reconcile object if the finalizer has been resistered/unregistered.
+    + reconcile again after a minute.
 + Writing unit tests for the following cases (they should pass and cover):
     + failed attempt to create a real github issue
     + create if issue not exist
@@ -21,8 +23,18 @@ The mission is at [Google Doc](https://docs.google.com/document/d/1z1bqlnBL8GO1F
 + implement deletion behaviour. A delete of the k8s object, triggers the github issue to be deleted.
 
 ## Ongoing Work
-+ Multiple creation of CR (probably race condition) sometimes when running unit tests.
 + Running Webhook cluster
 
 ## Future Work
 + Enabling to create issues with 'Lables' field, or other useful fields.
+
+
+## Usage
++ To test the unit tests - run `make test` in the main directory.
++ To run the reconcile
+    + locally - run `make install run`
+    + distributly (on a cluster) - run `make deploy IMG=quay.io/oraz/githubissueimage:1.1.1`
++ To test creation and deletion of githubIssue CR - run oc(openshift)/kubectl(K8s) and create/delete `oc create -f config/samples/my_test_samples/ex_X.yaml` where X can be 1 to 5 with five CR samples.
+## Finished Work
+
+The task is from [Google Doc](https://docs.google.com/document/d/1z1bqlnBL8GO1FecJ0B2djncFzNPukOL1jw0E5K1xpgI/).
