@@ -1,6 +1,6 @@
 # githubissues-operator
 An operator which creats, updates and deletes Github issues using [GO's Operator SDK](https://sdk.operatorframework.io/docs/building-operators/golang/tutorial/).
-The reconcile loop uses REST API calls for updating Github.com issues. 
+The reconcile loop uses REST API (GET/POST/PATCH) calls for updating Github.com issues. 
 
 ## Features
 + The Operator's Spec and Status are (api/v1alpha1/githubissue_types.go):
@@ -12,15 +12,15 @@ The reconcile loop uses REST API calls for updating Github.com issues.
     + gathers Github token from environment variable (by a secret)
     + register finalizer
     + delete the CR if it is needed
-    + create CR if that's the first run of reconcile, otherwise only updates it
-    + at the end update status of K8s object or the reconcile object if the finalizer has been resistered/unregistered.
+    + create CR if that's the first run of reconcile, otherwise fetch existing githubIssue from Github.com and update it's description (if it is different)
+    + at the end update the status of K8s object or the reconcile object if the finalizer has been resistered/unregistered.
     + reconcile again after a minute.
 + Writing unit tests for the following cases (api/v1alpha1/githubissue_types_test.go):
     + failed attempt to create a real github issue
     + create if issue not exist
     + failed attempt to update an issue
     + close issue on delete
-+ implement deletion behaviour. A delete of the k8s object, triggers the github issue to be deleted.
++ Creation/deletion of the k8s object, triggers the github issue to be created/deleted.
 
 ## Ongoing Work
 + Running Webhook cluster
