@@ -59,7 +59,6 @@ func DeleteIssue(githubi trainingv1alpha1.GithubIssue, ownerRepo string, token s
 	if ContainsString(githubi.GetFinalizers(), FinalizerName) { // https://book.kubebuilder.io/reference/using-finalizers.html
 		githubi.Status.State = "closed"
 		// send an API call to change the state and closing time of the Github Issue
-		// resp, err := CloseIssue(ownerRepo, githubi.Status.Number, token)
 		resp, _, err := GithubAPIcall(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, githubi.Status.Number, token, "CLOSE")
 		if err != nil {
 			return githubi, err, "REST"
@@ -79,7 +78,6 @@ func DeleteIssue(githubi trainingv1alpha1.GithubIssue, ownerRepo string, token s
 // CreateIssue creates a githubissue and chcecks for errors of REST, bad token/repo or JSON and eventually update the K8s object
 func GetIssue(githubi trainingv1alpha1.GithubIssue, ownerRepo string, token string, apiType string) (trainingv1alpha1.GithubIssue, error, string) {
 	var issue GithubRecieve // Storing the github issue from Github website
-	// resp, body, err := PostORpatchIsuue(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, githubi.Status.Number, token, isPost)
 	resp, body, err := GithubAPIcall(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, githubi.Status.Number, token, apiType)
 	if err != nil {
 		return githubi, err, "REST"
@@ -104,6 +102,8 @@ func GetIssue(githubi trainingv1alpha1.GithubIssue, ownerRepo string, token stri
 
 	}
 	if apiType == "GET" && githubi.Spec.Description != issue.Description {
+		// if there is a change in the description after pulling the issue from Github.com,
+		// then update the issue's description on the website with K8s issue's description
 		resp, body, err = GithubAPIcall(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, githubi.Status.Number, token, "PATCH")
 		if err != nil {
 			return githubi, err, "REST"
@@ -117,18 +117,6 @@ func GetIssue(githubi trainingv1alpha1.GithubIssue, ownerRepo string, token stri
 	}
 	return githubi, err, ""
 }
-
-// // UpdateIssue updates the githubissue and chcecks for errors of REST, bad token/repo
-// func UpdateIssue(githubi trainingv1alpha1.GithubIssue, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, error, string) {
-// 	resp, _, err := PostORpatchIsuue(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, githubi.Status.Number, token, false)
-// 	if err != nil {
-// 		return githubi, err, "REST"
-// 	}
-// 	if githubi, err = HttpHandler(githubi, resp.StatusCode, Ok_Code, ownerRepo); err != nil {
-// 		return githubi, err, "TOKEN"
-// 	}
-// 	return githubi, err, "" //empty string = no errors
-// }
 
 ////////////////////////////////////////////////////////////////  REST API FUNCTIONS  ////////////////////////////////////////////////////////////////
 
@@ -161,50 +149,6 @@ func GithubAPIcall(ownerRepo string, title string, description string, number in
 	return resp, body, err
 
 }
-
-// postORpatchIsuue make a Post or Patch REST API call to Github.com
-func PostORpatchIsuue(ownerRepo string, title string, description string, number int, token string, isPost bool) (*http.Response, []byte, error) {
-	issueData := GithubSend{Title: title, Body: description}
-	//make it json
-	jsonData, _ := json.Marshal(issueData)
-	//creating client to set custom headers for Authorization
-	client := &http.Client{}
-	var apiURL string
-	var req *http.Request
-	if isPost {
-		apiURL = "https://api.github.com/repos/" + ownerRepo + "/issues"
-		req, _ = http.NewRequest("POST", apiURL, bytes.NewReader(jsonData))
-	} else {
-		apiURL = "https://api.github.com/repos/" + ownerRepo + "/issues/" + strconv.Itoa(number)
-		req, _ = http.NewRequest("GET", apiURL, bytes.NewReader(jsonData))
-	}
-	req.Header.Set("Authorization", "token "+token)
-	resp, err := client.Do(req)
-	if resp.Body != nil {
-		defer resp.Body.Close()
-	}
-	body, _ := ioutil.ReadAll(resp.Body)
-	// fmt.Println("fmt - Hello from postORpatchIsuue, isPost =", isPost, ", status = ", resp.StatusCode, ", http.StatusCreated = ", http.StatusCreated, " and err = ", err) // fmt option
-	return resp, body, err
-} // postORpatchIsuue
-
-// CloseIssue make a Patch REST API call to Github.com to change the state of the githubissue which will close it
-func CloseIssue(ownerRepo string, issueNumber int, token string) (*http.Response, error) {
-	apiURL := "https://api.github.com/repos/" + ownerRepo + "/issues/" + strconv.Itoa(issueNumber)
-	issueData := GithubSend{State: "closed", ClosingTime: time.Now().Format("2006-01-02 15:04:05")} // formating time -> https://stackoverflow.com/questions/33119748/convert-time-time-to-string
-	//make it json
-	jsonData, _ := json.Marshal(issueData)
-	//creating client to set custom headers for Authorization
-	client := &http.Client{}
-	// fmt.Println("issueData ", issueData, ", jsonData", jsonData)
-	req, _ := http.NewRequest("PATCH", apiURL, bytes.NewReader(jsonData))
-	req.Header.Set("Authorization", "token "+token)
-	resp, err := client.Do(req)
-	if resp.Body != nil {
-		defer resp.Body.Close()
-	}
-	return resp, err
-} // closeIssue
 
 ////////////////////////////////////////////////////////////////  Other FUNCTIONS  ////////////////////////////////////////////////////////////////
 

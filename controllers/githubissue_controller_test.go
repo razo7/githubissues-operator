@@ -149,45 +149,37 @@ var _ = Describe("GithubIssue controller", func() {
 		When("we test creating and deleting - REST API", func() {
 			It("Post and Close - should succeed", func() {
 				var issue githubApi.GithubRecieve // Storing the github issue from Github website
-				resp, body, err := githubApi.PostORpatchIsuue(RepoName, githubIssue.Spec.Title, githubIssue.Spec.Description, githubIssue.Status.Number, token, true)
+				resp, body, err := githubApi.GithubAPIcall(RepoName, githubIssue.Spec.Title, githubIssue.Spec.Description, githubIssue.Status.Number, token, "POST")
 
 				Expect(err).To(BeNil())
 				Expect(resp.StatusCode).To(Equal(201))
-				// Expect(json.Unmarshal(body, &issue).BeNil())
+				Expect(json.Unmarshal(body, &issue)).To(BeNil())
 				_ = json.Unmarshal(body, &issue)
 				githubIssue.Status.Number = issue.Number
-				resp, err = githubApi.CloseIssue(RepoName, githubIssue.Status.Number, token)
+				resp, _, err = githubApi.GithubAPIcall(RepoName, githubIssue.Spec.Title, githubIssue.Spec.Description, githubIssue.Status.Number, token, "CLOSE")
 				Expect(err).To(BeNil())
 				Expect(resp.StatusCode).To(Equal(200))
 			}) // it - test 3
-		})
-		When("we test update Github.com - Bad POST REST API", func() {
+		}) // when - 2
+		When("we test update Github.com - Bad REST API", func() {
 
-			It("shouldn't succeed due to a bad repo", func() {
-				resp, _, err := githubApi.PostORpatchIsuue(RepoName+"1", githubIssue.Spec.Title, githubIssue.Spec.Description, githubIssue.Status.Number, token, true)
-				Expect(err).To(BeNil())
-				Expect(resp.StatusCode).To(Equal(404))
-			}) // it - test 4
 			It("shouldn't succeed due to a bad token", func() {
-
-				resp, _, err := githubApi.PostORpatchIsuue(RepoName, githubIssue.Spec.Title, githubIssue.Spec.Description, githubIssue.Status.Number, token+"something", true)
+				resp, _, err := githubApi.GithubAPIcall(RepoName, githubIssue.Spec.Title, githubIssue.Spec.Description, githubIssue.Status.Number, token+"somthing", "POST")
 				Expect(err).To(BeNil())
 				Expect(resp.StatusCode).To(Equal(401))
+			}) // it - test 4
+
+			It("shouldn't succeed due to a bad API call", func() {
+
+				resp, _, err := githubApi.GithubAPIcall(RepoName, githubIssue.Spec.Title, githubIssue.Spec.Description, githubIssue.Status.Number, token, "NOTHING")
+				Expect(err).To(BeNil())
+				Expect(resp.StatusCode).To(Equal(403))
 			}) // it - test 5
-
-		}) // when - 2
-
-		When("we test update Github.com - Bad GET REST API", func() {
 			It("shouldn't succeed due to a bad repo", func() {
-				resp, _, err := githubApi.PostORpatchIsuue(RepoName+"1", githubIssue.Spec.Title, githubIssue.Spec.Description, githubIssue.Status.Number, token, false)
+				resp, _, err := githubApi.GithubAPIcall(RepoName+"1", githubIssue.Spec.Title, githubIssue.Spec.Description, githubIssue.Status.Number, token, "POST")
 				Expect(err).To(BeNil())
 				Expect(resp.StatusCode).To(Equal(404))
 			}) // it - test 6
-			It("shouldn't succeed due to a bad token", func() {
-				resp, _, err := githubApi.PostORpatchIsuue(RepoName, githubIssue.Spec.Title, githubIssue.Spec.Description, githubIssue.Status.Number, token+"something", false)
-				Expect(err).To(BeNil())
-				Expect(resp.StatusCode).To(Equal(401))
-			}) // it - test 7
 
 		}) // when - 3
 
@@ -196,7 +188,7 @@ var _ = Describe("GithubIssue controller", func() {
 				By("check if number field is larger than zero")
 				Expect(githubIssue.Status.Number).To(BeNumerically(">", 0))
 				Expect(githubIssue.Status.Number).To(Not(Equal(0))) // another option
-			}) //it- test 8
+			}) //it- test 7
 		}) // when - 4
 
 		When("we delete an issue", func() {
@@ -233,40 +225,8 @@ var _ = Describe("GithubIssue controller", func() {
 				Eventually(func() error {
 					return k8sClient.Get(ctx, deleteGithubIssueLookupKey, &deletegithubIssue)
 				}, Timeout, Interval).ShouldNot(Succeed())
-			}) // it - test 9
+			}) // it - test 8
 		}) // when - 5
-
-		// When("we test updating an issue", func() {
-
-		// 	It("should set state to 'closed'", func() {
-		// 		By("change Status.State")
-		// 		Eventually(func() bool {
-		// 			By("change Status.State")
-		// 			Expect(k8sClient.Get(ctx, goodGithubIssueLookupKey, &githubIssue)).Should(Succeed())
-		// 			githubIssue.Status.State = "closed"
-		// 			err := k8sClient.Status().Update(ctx, &githubIssue)
-		// 			if err != nil {
-		// 				return false
-		// 			}
-		// 			return true
-		// 		}, Timeout, Interval).Should(BeTrue())
-		// 		Expect(githubIssue.Status.State).To(Equal("closed"))
-		// 	}) //it- test 3
-
-		// 	It("should set number to two ", func() {
-		// 		Eventually(func() bool {
-		// 			By("change Status.Number")
-		// 			Expect(k8sClient.Get(ctx, goodGithubIssueLookupKey, &githubIssue)).Should(Succeed())
-		// 			githubIssue.Status.Number = 2 // set the new issue number
-		// 			err := k8sClient.Status().Update(ctx, &githubIssue)
-		// 			if err != nil {
-		// 				return false
-		// 			}
-		// 			return true
-		// 		}, Timeout, Interval).Should(BeTrue())
-		// 		Expect(githubIssue.Status.Number).To(Equal(2))
-		// 	}) //it- test 4
-		// }) // when - 2
 	}) //context
 
 })
