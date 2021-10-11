@@ -39,8 +39,6 @@ import (
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
-	"encoding/json"
-
 	// metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	// "fmt"
@@ -125,13 +123,11 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// If my K8s GithubIssue doesn't have an ID then create a new GithubIssue and update it's ID
 	// Otherwiese I have already created it earlier and it had an ID and I just update it's description
 	logger.Info("After fetching K8s", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
-	var issue githubApi.GithubRecieve // storing the github issue from Github website
-	var jsonBody []byte               // storing the github issue from Github website in a JSON format
 
 	if githubi.Status.State != githubApi.Fail_Repo { // if the repo is valid
 
 		if githubi.Status.Number == 0 { // Zero = uninitialized field
-			if githubi, jsonBody, err, errType = githubApi.CreateIssue(githubi, logger, ownerRepo, token); err != nil {
+			if githubi, err, errType = githubApi.CreateIssue(githubi, logger, ownerRepo, token); err != nil {
 				switch errType {
 				case "REST":
 					logger.Error(err, githubApi.REST_ERROR)
@@ -146,7 +142,8 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			logger.Info("After posting a GithubIssue", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
 
 		} else {
-			if githubi, jsonBody, err, errType = githubApi.UpdateIssue(githubi, logger, ownerRepo, token); err != nil {
+			// if githubi.Spec.Description != issue.Description { // update the description (if needed).
+			if githubi, err, errType = githubApi.UpdateIssue(githubi, logger, ownerRepo, token); err != nil {
 				switch errType {
 				case "REST":
 					logger.Error(err, githubApi.REST_ERROR)
@@ -161,15 +158,15 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		} // else
 		// if githubi.Status.State != githubApi.Fail_Repo { // if the repo is valid
 
-		if err := json.Unmarshal(jsonBody, &issue); err != nil {
-			logger.Error(err, "Parsing error")
-			return result, err
-		}
-		if githubi.Spec.Description != issue.Description { // update the description (if needed).
-			githubi.Spec.Description = issue.Description
-			githubi.Status.State = issue.State
-			githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
-		}
+		// if err := json.Unmarshal(jsonBody, &issue); err != nil {
+		// 	logger.Error(err, "Parsing error")
+		// 	return result, err
+		// }
+		// if githubi.Spec.Description != issue.Description { // update the description (if needed).
+		// 	githubi.Spec.Description = issue.Description
+		// 	githubi.Status.State = issue.State
+		// 	githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
+		// }
 		//}
 	} else {
 		// remove our finalizer from the list and update it.

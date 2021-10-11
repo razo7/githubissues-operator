@@ -15,7 +15,7 @@ The reconcile loop uses REST API calls for updating Github.com issues.
     + create CR if that's the first run of reconcile, otherwise only updates it
     + at the end update status of K8s object or the reconcile object if the finalizer has been resistered/unregistered.
     + reconcile again after a minute.
-+ Writing unit tests for the following cases (they should pass and cover):
++ Writing unit tests for the following cases (api/v1alpha1/githubissue_types_test.go):
     + failed attempt to create a real github issue
     + create if issue not exist
     + failed attempt to update an issue
@@ -30,6 +30,7 @@ The reconcile loop uses REST API calls for updating Github.com issues.
 + To run the reconcile
     + locally - run `make install run`
     + distributly (on a cluster) - run `make deploy IMG=quay.io/oraz/githubissueimage:1.1.1`
+    and then run `kubectl create secret generic mysecret --from-literal=github-token=PUBLIC_GITHUB_TOKEN -n githubissues-operator-system` where PUBLIC_GITHUB_TOKEN is the github 
 + To test creation or deletion of githubIssue CR - run oc(openshift)/kubectl(K8s) or create/delete `oc create -f config/samples/my_test_samples/ex_X.yaml` where X can be 1 to 5 with five CR samples.
 ## Finished Work
 

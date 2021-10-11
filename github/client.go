@@ -75,33 +75,33 @@ func DeleteIssue(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, owner
 }
 
 // CreateIssue creates a githubissue and chcecks for errors of REST, bad token/repo or JSON and eventually update the K8s object
-func CreateIssue(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, []byte, error, string) {
+func CreateIssue(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, error, string) {
 	resp, body, err := PostORpatchIsuue(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, githubi.Status.Number, token, true)
 	if err != nil {
-		return githubi, body, err, "REST"
+		return githubi, err, "REST"
 	}
 	if githubi, err = HttpHandler(githubi, logger, resp.StatusCode, Created_Code, ownerRepo); err != nil {
-		return githubi, body, err, "TOKEN"
+		return githubi, err, "TOKEN"
 	}
 	if err := json.Unmarshal(body, &issue); err != nil {
-		return githubi, body, err, "JSON"
+		return githubi, err, "JSON"
 	}
 	githubi.Status.Number = issue.Number // set the new issue number
 	githubi.Status.State = issue.State
 	githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
-	return githubi, body, err, ""
+	return githubi, err, ""
 }
 
 // UpdateIssue updates the githubissue and chcecks for errors of REST, bad token/repo
-func UpdateIssue(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, []byte, error, string) {
-	resp, body, err := PostORpatchIsuue(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, githubi.Status.Number, token, false)
+func UpdateIssue(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, error, string) {
+	resp, _, err := PostORpatchIsuue(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, githubi.Status.Number, token, false)
 	if err != nil {
-		return githubi, body, err, "REST"
+		return githubi, err, "REST"
 	}
 	if githubi, err = HttpHandler(githubi, logger, resp.StatusCode, Ok_Code, ownerRepo); err != nil {
-		return githubi, body, err, "TOKEN"
+		return githubi, err, "TOKEN"
 	}
-	return githubi, body, err, "" //empty string = no errors
+	return githubi, err, "" //empty string = no errors
 }
 
 ////////////////////////////////////////////////////////////////  REST API FUNCTIONS  ////////////////////////////////////////////////////////////////
