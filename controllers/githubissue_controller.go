@@ -116,12 +116,12 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			} // switch
 			return result, err
 		}
-		logger.Info("Closing", "issue number", githubi.Status.Number)
+		logger.Info("Closing issue", "number", githubi.Status.Number)
 	} // if we need to delete the issue
 
 	// If my K8s GithubIssue doesn't have an ID then create a new GithubIssue and update it's ID
 	// Otherwiese I have already created it earlier and it had an ID and I just update it's description
-	logger.Info("After fetching K8s", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
+	logger.Info("After fetching K8s issue", "number", githubi.Status.Number, "state", githubi.Status.State)
 
 	if githubi.Status.State != githubApi.Fail_Repo { // if the repo is valid
 
@@ -138,7 +138,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				} // switch
 				return result, err
 			} // CreateIssue
-			logger.Info("After posting a GithubIssue", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
+			logger.Info("After posting a GithubIssue", "number", githubi.Status.Number, "state", githubi.Status.State)
 
 		} else {
 			// if githubi.Spec.Description != issue.Description { // update the description (if needed).
@@ -153,9 +153,9 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				return result, err
 			}
 			if errType == "UPDATE" {
-				logger.Info("After updating description", "githubi.Status.Number", githubi.Status.Number, "githubi.Spec.Description", githubi.Spec.Description)
+				logger.Info("After updating issue's description", "number", githubi.Status.Number, "description", githubi.Spec.Description)
 			} else {
-				logger.Info("No need to update description", "githubi.Status.Number", githubi.Status.Number, "githubi.Spec.Description", githubi.Spec.Description)
+				logger.Info("No need to update issue's description", "number", githubi.Status.Number, "description", githubi.Spec.Description)
 			}
 		} // else
 	} else {
@@ -177,7 +177,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	}
 
-	logger.Info("End", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
+	logger.Info("End reconcile", "number", githubi.Status.Number, "state", githubi.Status.State)
 	return ctrl.Result{RequeueAfter: 60 * time.Second}, nil // tweak the resync period to every 1 minute.
 } // Reconcile
 

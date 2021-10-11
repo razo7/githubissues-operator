@@ -29,7 +29,7 @@ The reconcile loop uses REST API (GET/POST/PATCH) calls for updating Github.com 
 + To test the unit tests - run `make test` in the main directory.
 + To run the reconcile
     + locally - run `make install run`
-    + distributly (on a cluster) - run `make deploy IMG=quay.io/oraz/githubissueimage:1.1.1`
+    + distributly (on a cluster) - run `make deploy IMG=quay.io/oraz/githubissueimage:1.1.2`
     and then run `kubectl create secret generic mysecret --from-literal=github-token=PUBLIC_GITHUB_TOKEN -n githubissues-operator-system` where PUBLIC_GITHUB_TOKEN is the github 
 + To test creation or deletion of githubIssue CR - run oc(openshift)/kubectl(K8s) or create/delete `oc create -f config/samples/my_test_samples/ex_X.yaml` where X can be 1 to 5 with five CR samples.
 ## Finished Work
