@@ -20,7 +20,7 @@ The reconcile loop uses REST API (GET/POST/PATCH) calls for updating Github.com 
     + create if issue not exist
     + failed attempt to update an issue
     + close issue on delete
-+ Creation/deletion of the k8s object, triggers the github issue to be created/deleted.
++ Creation/deletion of the k8s object triggers the github issue to be created/deleted.
 
 ## Ongoing Work
 + Running Webhook cluster

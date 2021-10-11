@@ -78,7 +78,6 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	firstRun := true
 	var err error
 	var errType string // Storing the type of the error
-	var oldDescription string
 
 	if err := r.Get(ctx, req.NamespacedName, &githubi); err != nil {
 		if githubi.Status.Number == 0 { // if we can't fetch the issue after deleting it then stop it (we got here due to the last update)
@@ -124,7 +123,6 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Otherwiese I have already created it earlier and it had an ID and I just update it's description
 	logger.Info("After fetching K8s", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
 
-	oldDescription = githubi.Spec.Description
 	if githubi.Status.State != githubApi.Fail_Repo { // if the repo is valid
 
 		if githubi.Status.Number == 0 { // Zero = uninitialized field
@@ -166,16 +164,6 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Update the client status or the whole client (for register/unregister finalizer)
-	if oldDescription != githubi.Spec.Description {
-		if err := r.Update(ctx, &githubi); err != nil {
-			logger.Error(err, "Can't update Client's Spec - description")
-			return result, err
-		}
-		if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
-			logger.Error(err, "Can't update Client's status")
-			return result, err
-		}
-	}
 	if firstRun {
 		if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
 			logger.Error(err, "Can't update Client's status")
