@@ -32,9 +32,10 @@ const (
 	JSON_ERROR  = "Parsing error"
 )
 
-var (
-	issue GithubRecieve // Storing the github issue from Github website
-)
+// var (
+
+// 	issueData GithubSend
+// )
 
 // A GithubRecieve struct to map the entire Response
 type GithubRecieve struct {

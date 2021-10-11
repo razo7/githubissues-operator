@@ -27,7 +27,6 @@ import (
 	"context"
 
 	trainingv1alpha1 "github.com/razo7/githubissues-operator/api/v1alpha1"
-	"github.com/razo7/githubissues-operator/github"
 	githubApi "github.com/razo7/githubissues-operator/github"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -50,9 +49,9 @@ import (
 // GithubIssueReconciler reconciles a GithubIssue object
 type GithubIssueReconciler struct {
 	client.Client
-	Log          logr.Logger
-	Scheme       *runtime.Scheme
-	GithubClient github.Client
+	Log    logr.Logger
+	Scheme *runtime.Scheme
+	// GithubClient github.Client
 }
 
 //+kubebuilder:rbac:groups=training.githubissues,resources=githubissues,verbs=get;list;watch;create;update;patch;delete
@@ -79,6 +78,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	firstRun := true
 	var err error
 	var errType string // Storing the type of the error
+	var oldDescription string
 
 	if err := r.Get(ctx, req.NamespacedName, &githubi); err != nil {
 		if githubi.Status.Number == 0 { // if we can't fetch the issue after deleting it then stop it (we got here due to the last update)
@@ -107,7 +107,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// examine DeletionTimestamp to determine if object is under deletion
 	if !githubi.ObjectMeta.DeletionTimestamp.IsZero() {
 		// The object is being deleted
-		if githubi, err, errType = githubApi.DeleteIssue(githubi, logger, ownerRepo, token); err != nil {
+		if githubi, err, errType = githubApi.DeleteIssue(githubi, ownerRepo, token); err != nil {
 			switch errType {
 			case "REST":
 				logger.Error(err, githubApi.REST_ERROR+"Can't close the repo's issue")
@@ -124,10 +124,11 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Otherwiese I have already created it earlier and it had an ID and I just update it's description
 	logger.Info("After fetching K8s", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
 
+	oldDescription = githubi.Spec.Description
 	if githubi.Status.State != githubApi.Fail_Repo { // if the repo is valid
 
 		if githubi.Status.Number == 0 { // Zero = uninitialized field
-			if githubi, err, errType = githubApi.CreateIssue(githubi, logger, ownerRepo, token); err != nil {
+			if githubi, err, errType = githubApi.GetIssue(githubi, ownerRepo, token, "POST"); err != nil {
 				switch errType {
 				case "REST":
 					logger.Error(err, githubApi.REST_ERROR)
@@ -143,7 +144,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 		} else {
 			// if githubi.Spec.Description != issue.Description { // update the description (if needed).
-			if githubi, err, errType = githubApi.UpdateIssue(githubi, logger, ownerRepo, token); err != nil {
+			if githubi, err, errType = githubApi.GetIssue(githubi, ownerRepo, token, "GET"); err != nil {
 				switch errType {
 				case "REST":
 					logger.Error(err, githubApi.REST_ERROR)
@@ -153,28 +154,29 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				} // switch
 				return result, err
 			}
-			logger.Info("After updating a GithubIssue", "githubi.Status.Number", githubi.Status.Number, "githubi.Status.State", githubi.Status.State)
-
+			if errType == "UPDATE" {
+				logger.Info("After updating description", "githubi.Status.Number", githubi.Status.Number, "githubi.Spec.Description", githubi.Spec.Description)
+			} else {
+				logger.Info("No need to update description", "githubi.Status.Number", githubi.Status.Number, "githubi.Spec.Description", githubi.Spec.Description)
+			}
 		} // else
-		// if githubi.Status.State != githubApi.Fail_Repo { // if the repo is valid
-
-		// if err := json.Unmarshal(jsonBody, &issue); err != nil {
-		// 	logger.Error(err, "Parsing error")
-		// 	return result, err
-		// }
-		// if githubi.Spec.Description != issue.Description { // update the description (if needed).
-		// 	githubi.Spec.Description = issue.Description
-		// 	githubi.Status.State = issue.State
-		// 	githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
-		// }
-		//}
 	} else {
 		// remove our finalizer from the list and update it.
 		controllerutil.RemoveFinalizer(&githubi, githubApi.FinalizerName)
 	}
 
 	// Update the client status or the whole client (for register/unregister finalizer)
-	if githubi.Status.State == "open" {
+	if oldDescription != githubi.Spec.Description {
+		if err := r.Update(ctx, &githubi); err != nil {
+			logger.Error(err, "Can't update Client's Spec - description")
+			return result, err
+		}
+		if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
+			logger.Error(err, "Can't update Client's status")
+			return result, err
+		}
+	}
+	if firstRun {
 		if err := r.Client.Status().Update(ctx, &githubi); err != nil { // Update Vs. Patch -> https://sdk.operatorframework.io/docs/building-operators/golang/references/client/#status
 			logger.Error(err, "Can't update Client's status")
 			return result, err
