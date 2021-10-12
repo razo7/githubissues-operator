@@ -16,26 +16,22 @@ limitations under the License.
 
 package github
 
-import (
-	"github.com/go-logr/logr"
-	trainingv1alpha1 "github.com/razo7/githubissues-operator/api/v1alpha1"
-)
-
 const (
 	Fail_Repo     = "Fail repo"
 	Created_Code  = 201 // https://docs.github.com/en/rest/reference/issues#create-an-issue
 	Ok_Code       = 200
 	FinalizerName = "batch.tutorial.kubebuilder.io/finalizer"
 
-	REST_ERROR  = "REST API error"
-	TOKEN_ERROR = "Repo or Token error"
-	JSON_ERROR  = "Parsing error"
+	REST_ERROR = "REST API error"
+	HTTP_ERROR = "Repo or Token error"
+	JSON_ERROR = "Parsing error"
+
+	PATCH = "PATCH call"
+	POST  = "POST call"
+	GET   = "GET call"
 )
 
-// var (
-
-// 	issueData GithubSend
-// )
+var token string // Good link for using secrets -> https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables
 
 // A GithubRecieve struct to map the entire Response
 type GithubRecieve struct {
@@ -52,18 +48,4 @@ type GithubSend struct {
 	Body        string `json:"body,omitempty"`
 	State       string `json:"state,omitempty"`
 	ClosingTime string `json:"closed_at,omitempty"`
-	// Labels      string `json:"labels` /// TODO: add label functionality
-
-}
-
-type Client interface {
-	DeleteIssue(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, error)
-	CreateIssue(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, []byte, error, byte)
-	UpdateIssue(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, []byte, error)
-
-	// PostORpatchIsuue(ownerRepo string, title string, description string, number int, token string, isPost bool) (*http.Response, []byte, error)
-	// CloseIssue(ownerRepo string, issueNumber int, token string) (*http.Response, error)
-
-	// HttpHandler(githubi trainingv1alpha1.GithubIssue, logger logr.Logger, httpCode int, expectedCode int, ownerRepo string) (trainingv1alpha1.GithubIssue, error)
-	// ContainsString(slice []string, s string) bool
 }

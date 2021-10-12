@@ -7,4 +7,3 @@ spec:
   repo: https://github.com/razo7/githubissues-operator
   title: K8s Second Issue
   description: Hi 2
-  labels: documentation

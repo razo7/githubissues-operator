@@ -41,7 +41,7 @@ import (
 	// metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	// "fmt"
-	"os"
+
 	"strings"
 	"time"
 )
@@ -77,24 +77,22 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	result := ctrl.Result{}                   // Empty Result
 	firstRun := true
 	var err error
-	var errType string // Storing the type of the error
+	var sucess bool
 
 	if err := r.Get(ctx, req.NamespacedName, &githubi); err != nil {
-		if githubi.Status.Number == 0 { // if we can't fetch the issue after deleting it then stop it (we got here due to the last update)
+		if githubi.Status.Number == 0 { // if we can't fetch the issue after deleting it then stop reconcile
 			return result, nil
 		}
 		if apierrors.IsNotFound(err) {
-			logger.Error(err, "Can't fetch Kubernetes github object", "object")
+			logger.Error(err, "Can't fetch Kubernetes github object")
 			return result, nil
 		}
 		return result, err
 	}
 	if githubi.Status.Number > 0 {
-		firstRun = false
+		firstRun = false // chnaged into false once it has a number (ID)
 	}
 	ownerRepo := strings.Split(githubi.Spec.Repo, "github.com/")[1] // extract the repo's username, and repo's name from the repo's url
-	// Good link for using secrets -> https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables
-	token := os.Getenv("GIT_TOKEN_GI") // store the github token you use in a secret and use it in the code by reading an env variable
 	// register finalizer once the CR has been created
 	if githubi.Status.LastUpdateTimestamp == "" {
 		if !githubApi.ContainsString(githubi.GetFinalizers(), githubApi.FinalizerName) {
@@ -106,17 +104,11 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// examine DeletionTimestamp to determine if object is under deletion
 	if !githubi.ObjectMeta.DeletionTimestamp.IsZero() {
 		// The object is being deleted
-		if githubi, err, errType = githubApi.DeleteIssue(githubi, ownerRepo, token); err != nil {
-			switch errType {
-			case "REST":
-				logger.Error(err, githubApi.REST_ERROR+"Can't close the repo's issue")
-				// panic(err)
-			case "TOKEN":
-				logger.Error(err, githubApi.TOKEN_ERROR)
-			} // switch
+		if githubi, err = githubApi.DeleteIssue(githubi, ownerRepo); err != nil {
+			logger.Error(err, "Closing issue")
 			return result, err
 		}
-		logger.Info("Closing issue", "number", githubi.Status.Number)
+		logger.Info("Successful close", "number", githubi.Status.Number)
 	} // if we need to delete the issue
 
 	// If my K8s GithubIssue doesn't have an ID then create a new GithubIssue and update it's ID
@@ -126,36 +118,20 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if githubi.Status.State != githubApi.Fail_Repo { // if the repo is valid
 
 		if githubi.Status.Number == 0 { // Zero = uninitialized field
-			if githubi, err, errType = githubApi.GetIssue(githubi, ownerRepo, token, "POST"); err != nil {
-				switch errType {
-				case "REST":
-					logger.Error(err, githubApi.REST_ERROR)
-				case "TOKEN":
-					logger.Error(err, githubApi.TOKEN_ERROR)
-					// panic(err)
-				case "JSON":
-					logger.Error(err, githubApi.JSON_ERROR)
-				} // switch
+			if githubi, err, _ = githubApi.GetIssue(githubi, ownerRepo, "POST"); err != nil {
+				logger.Error(err, "Creating Issue")
 				return result, err
-			} // CreateIssue
-			logger.Info("After posting a GithubIssue", "number", githubi.Status.Number, "state", githubi.Status.State)
+			}
+			logger.Info("Successful creation", "number", githubi.Status.Number, "state", githubi.Status.State)
 
 		} else {
 			// if githubi.Spec.Description != issue.Description { // update the description (if needed).
-			if githubi, err, errType = githubApi.GetIssue(githubi, ownerRepo, token, "GET"); err != nil {
-				switch errType {
-				case "REST":
-					logger.Error(err, githubApi.REST_ERROR)
-				case "TOKEN":
-					logger.Error(err, githubApi.TOKEN_ERROR)
-					// panic(err)
-				} // switch
+			if githubi, err, sucess = githubApi.GetIssue(githubi, ownerRepo, "GET"); err != nil {
+				logger.Error(err, "Updating Issue")
 				return result, err
 			}
-			if errType == "UPDATE" {
-				logger.Info("After updating issue's description", "number", githubi.Status.Number, "description", githubi.Spec.Description)
-			} else {
-				logger.Info("No need to update issue's description", "number", githubi.Status.Number, "description", githubi.Spec.Description)
+			if sucess {
+				logger.Info("Successful update", "number", githubi.Status.Number, "description", githubi.Spec.Description)
 			}
 		} // else
 	} else {
@@ -172,7 +148,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 	if firstRun || githubi.Status.State == "closed" {
 		if err := r.Update(ctx, &githubi); err != nil {
-			logger.Error(err, "Can't update reconciler - for register/unregister finalizer")
+			logger.Error(err, "Can't update reconcile - for register/unregister finalizer")
 			return result, err
 		}
 	}

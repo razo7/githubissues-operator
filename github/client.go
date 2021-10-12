@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -29,10 +30,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+func init() {
+	token = os.Getenv("GIT_TOKEN_GI") // store the github token you use in a secret and use it in the code by reading an env variable
+}
+
 ////////////////////////////////////////////////////////////////  Client FUNCTIONS  ////////////////////////////////////////////////////////////////
 
 // HttpHandler check for a mismatch between httpCode and the expected code, and update the Stauts accordingly
-func HttpHandler(githubi trainingv1alpha1.GithubIssue, httpCode int, expectedCode int, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, error) {
+func HttpHandler(githubi trainingv1alpha1.GithubIssue, httpCode int, expectedCode int, ownerRepo string) (trainingv1alpha1.GithubIssue, error) {
 	var err error
 	var errName string
 	switch httpCode {
@@ -46,41 +51,49 @@ func HttpHandler(githubi trainingv1alpha1.GithubIssue, httpCode int, expectedCod
 		errName = ""
 	}
 	if httpCode != expectedCode {
-		err = fmt.Errorf("Not valid repo - %s, or token - %s, received bad HTTP response code - %d%s", ownerRepo, token, httpCode, errName)
+		err = fmt.Errorf(" Repo - %s, Token - %s, bad HTTP response code - %d%s", ownerRepo, token, httpCode, errName)
 		githubi.Status.State = Fail_Repo
 		githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
 	} // if -status error
 	return githubi, err
 }
 
-// DeleteCR check if FinalizerName has been registered, make a REST API call to close the Issue, check http response and eventually unregister FinalizerName
-func DeleteIssue(githubi trainingv1alpha1.GithubIssue, ownerRepo string, token string) (trainingv1alpha1.GithubIssue, error, string) {
+// DeleteIssue check if FinalizerName has been registered, make a REST API call to close the Issue,
+// then check http response and eventually unregister FinalizerName
+func DeleteIssue(githubi trainingv1alpha1.GithubIssue, ownerRepo string) (trainingv1alpha1.GithubIssue, error) {
 	var err error
 	if ContainsString(githubi.GetFinalizers(), FinalizerName) { // https://book.kubebuilder.io/reference/using-finalizers.html
 		githubi.Status.State = "closed"
 		// send an API call to change the state and closing time of the Github Issue
 		resp, _, err := GithubAPIcall(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, githubi.Status.Number, token, "CLOSE")
 		if err != nil {
-			return githubi, err, "REST"
+			return githubi, fmt.Errorf("%v: %v :%w", PATCH, REST_ERROR, err) // wraping an error
 		}
-		if githubi, err = HttpHandler(githubi, resp.StatusCode, Ok_Code, ownerRepo, token); err != nil {
-			return githubi, err, "TOKEN"
+		if githubi, err = HttpHandler(githubi, resp.StatusCode, Ok_Code, ownerRepo); err != nil {
+			return githubi, fmt.Errorf("%v: %v :%w", PATCH, HTTP_ERROR, err)
 		} else {
 			// remove our finalizer from the list and update it.
 			controllerutil.RemoveFinalizer(&githubi, FinalizerName)
 			githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
 		}
 	}
-	return githubi, err, ""
+	return githubi, err
 	// return result, nil // Stop reconciliation as the item is being deleted
 }
 
-// CreateIssue creates a githubissue and chcecks for errors of REST, bad token/repo or JSON and eventually update the K8s object
-func GetIssue(githubi trainingv1alpha1.GithubIssue, ownerRepo string, token string, apiType string) (trainingv1alpha1.GithubIssue, error, string) {
+// GetIssue creates a githubissue or fetch and update.
+// Then it chcecks for errors of REST, bad token/repo or JSON and eventually update the K8s object
+func GetIssue(githubi trainingv1alpha1.GithubIssue, ownerRepo string, apiType string) (trainingv1alpha1.GithubIssue, error, bool) {
 	var issue GithubRecieve // Storing the github issue from Github website
+	var firstCall string
+	if apiType == "GET" {
+		firstCall = GET
+	} else {
+		firstCall = POST
+	}
 	resp, body, err := GithubAPIcall(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, githubi.Status.Number, token, apiType)
 	if err != nil {
-		return githubi, err, "REST"
+		return githubi, fmt.Errorf("%v: %v :%w", firstCall, REST_ERROR, err), false
 	}
 	var expectedCode int
 	if apiType == "POST" {
@@ -88,38 +101,36 @@ func GetIssue(githubi trainingv1alpha1.GithubIssue, ownerRepo string, token stri
 	} else {
 		expectedCode = Ok_Code
 	}
-
-	if githubi, err = HttpHandler(githubi, resp.StatusCode, expectedCode, ownerRepo, token); err != nil {
-		return githubi, err, "TOKEN"
+	if githubi, err = HttpHandler(githubi, resp.StatusCode, expectedCode, ownerRepo); err != nil {
+		return githubi, fmt.Errorf("%v: %v :%w", firstCall, HTTP_ERROR, err), false
 	}
 	if err := json.Unmarshal(body, &issue); err != nil {
-		return githubi, err, "JSON"
+		return githubi, fmt.Errorf("%v: %v :%w", firstCall, JSON_ERROR, err), false
 	}
 	if apiType == "POST" {
 		githubi.Status.Number = issue.Number // set the new issue number
 		githubi.Status.State = issue.State
 		githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
-
 	}
+
 	if apiType == "GET" && githubi.Spec.Description != issue.Description {
 		// if there is a change in the description after pulling the issue from Github.com,
 		// then update the issue's description on the website with K8s issue's description
 		resp, body, err = GithubAPIcall(ownerRepo, githubi.Spec.Title, githubi.Spec.Description, githubi.Status.Number, token, "PATCH")
 		if err != nil {
-			return githubi, err, "REST"
+			return githubi, fmt.Errorf("%v: %v :%w", PATCH, REST_ERROR, err), false
 		}
-		if githubi, err = HttpHandler(githubi, resp.StatusCode, expectedCode, ownerRepo, token); err != nil {
-			return githubi, err, "TOKEN"
+		if githubi, err = HttpHandler(githubi, resp.StatusCode, expectedCode, ownerRepo); err != nil {
+			return githubi, fmt.Errorf("%v: %v :%w", PATCH, HTTP_ERROR, err), false
 		}
-		return githubi, err, "UPDATE"
-		// githubi.Spec.Description = issue.Description
-		// githubi.Status.LastUpdateTimestamp = time.Now().String() // update LastUpdateTimestamp field
+		return githubi, err, true // successfully updating the githubIssue in Github.com
 	}
-	return githubi, err, ""
+	return githubi, err, false
 }
 
-////////////////////////////////////////////////////////////////  REST API FUNCTIONS  ////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////  Other FUNCTIONS  ////////////////////////////////////////////////////////////////
 
+// GithubAPIcall makes a HTTP call based apiType variable to Github.com
 func GithubAPIcall(ownerRepo string, title string, description string, number int, token string, apiType string) (*http.Response, []byte, error) {
 	var issueData GithubSend
 	if apiType == "CLOSE" {
@@ -147,10 +158,7 @@ func GithubAPIcall(ownerRepo string, title string, description string, number in
 	body, _ := ioutil.ReadAll(resp.Body)
 	// fmt.Println("fmt - Hello from postORpatchIsuue, isPost =", isPost, ", status = ", resp.StatusCode, ", http.StatusCreated = ", http.StatusCreated, " and err = ", err) // fmt option
 	return resp, body, err
-
 }
-
-////////////////////////////////////////////////////////////////  Other FUNCTIONS  ////////////////////////////////////////////////////////////////
 
 // Helper functions to check and remove string from a slice of string. From https://book.kubebuilder.io/reference/using-finalizers.html
 func ContainsString(slice []string, s string) bool {

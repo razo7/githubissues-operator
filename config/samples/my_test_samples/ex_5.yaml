@@ -7,4 +7,3 @@ spec:
   repo: https://github.com/razo7/githubissues-operator2
   title: K8s Fifth Issue - problem
   description: Hi 5
-  labels: help wanted

@@ -7,4 +7,3 @@ spec:
   repo: https://github.com/razo7/githubissues-operator
   title: K8s First Issue
   description: Hi 1
-  labels: help wanted
