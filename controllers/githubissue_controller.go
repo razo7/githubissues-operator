@@ -19,9 +19,6 @@ package controllers
 //	How to create this repo? Follow the next two lines
 //	operator-sdk init --domain githubissues --repo github.com/razo7/githubissues-operator --owner "Or Raz"
 //	operator-sdk create api --group training --version v1alpha1 --kind GithubIssue --resource --controller
-//  run 'kubectl create secret generic mysecret --from-literal=github-token=PUBLIC_GITHUB_TOKEN -n githubissues-operator-system'
-//  after 'make deploy'
-//  and 'kubectl delete secret mysecret' to delete it
 
 import (
 	"context"
@@ -33,17 +30,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	// "sigs.k8s.io/controller-runtime/pkg/log"
+	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-
-	// metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	// "fmt"
-
-	"strings"
-	"time"
 )
 
 // GithubIssueReconciler reconciles a GithubIssue object
@@ -51,7 +42,6 @@ type GithubIssueReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
-	// GithubClient github.Client
 }
 
 //+kubebuilder:rbac:groups=training.githubissues,resources=githubissues,verbs=get;list;watch;create;update;patch;delete
@@ -77,7 +67,7 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	result := ctrl.Result{}                   // Empty Result
 	firstRun := true
 	var err error
-	var sucess bool
+	var success bool
 
 	if err := r.Get(ctx, req.NamespacedName, &githubi); err != nil {
 		if githubi.Status.Number == 0 { // if we can't fetch the issue after deleting it then stop reconcile
@@ -113,7 +103,11 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// If my K8s GithubIssue doesn't have an ID then create a new GithubIssue and update it's ID
 	// Otherwiese I have already created it earlier and it had an ID and I just update it's description
-	logger.Info("After fetching K8s issue", "number", githubi.Status.Number, "state", githubi.Status.State)
+	if firstRun {
+		logger.Info("First run", "number", githubi.Status.Number, "state", githubi.Status.State)
+	} else {
+		logger.Info("Before creation/update", "number", githubi.Status.Number, "state", githubi.Status.State)
+	}
 
 	if githubi.Status.State != githubApi.Fail_Repo { // if the repo is valid
 
@@ -126,11 +120,11 @@ func (r *GithubIssueReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 		} else {
 			// if githubi.Spec.Description != issue.Description { // update the description (if needed).
-			if githubi, err, sucess = githubApi.GetIssue(githubi, ownerRepo, "GET"); err != nil {
+			if githubi, err, success = githubApi.GetIssue(githubi, ownerRepo, "GET"); err != nil {
 				logger.Error(err, "Updating Issue")
 				return result, err
 			}
-			if sucess {
+			if success {
 				logger.Info("Successful update", "number", githubi.Status.Number, "description", githubi.Spec.Description)
 			}
 		} // else
