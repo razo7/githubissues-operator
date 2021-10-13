@@ -17,16 +17,56 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"os"
+	"path/filepath"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
+const (
+	WebhookCertDir  = "/apiserver.local.config/certificates"
+	WebhookCertName = "apiserver.crt"
+	WebhookKeyName  = "apiserver.key"
+)
+
 // log is for logging in this package.
 var githubissuelog = logf.Log.WithName("githubissue-resource")
 
+// NodeMaintenanceValidator validates NodeMaintenance resources. Needed because we need a client for validation
+// +k8s:deepcopy-gen=false
+// type NodeMaintenanceValidator struct {
+// 	client client.Client
+// }
+
+// var validator *NodeMaintenanceValidator
+
 func (r *GithubIssue) SetupWebhookWithManager(mgr ctrl.Manager) error {
+	// // init the validator!
+	// validator = &NodeMaintenanceValidator{
+	// 	client: mgr.GetClient(),
+	// }
+
+	// check if OLM injected certs
+	certs := []string{filepath.Join(WebhookCertDir, WebhookCertName), filepath.Join(WebhookCertDir, WebhookKeyName)}
+	certsInjected := true
+	for _, fname := range certs {
+		if _, err := os.Stat(fname); err != nil {
+			certsInjected = false
+			break
+		}
+	}
+	if certsInjected {
+		server := mgr.GetWebhookServer()
+		server.CertDir = WebhookCertDir
+		server.CertName = WebhookCertName
+		server.KeyName = WebhookKeyName
+	} else {
+		githubissuelog.Info("OLM injected certs for webhooks not found")
+	}
+
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(r).
 		Complete()
